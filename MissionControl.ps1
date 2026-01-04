@@ -319,26 +319,47 @@ function New-DraggablePanel {
     # Create Grid for layout
     $grid = New-Object Windows.Controls.Grid
     $rowDef1 = New-Object Windows.Controls.RowDefinition
-    $rowDef1.Height = New-Object Windows.GridLength(30, [Windows.GridUnitType]::Pixel)
+    $rowDef1.Height = [Windows.GridLength]::Auto  # Auto height for title bar with text wrapping
     $rowDef2 = New-Object Windows.Controls.RowDefinition
     $rowDef2.Height = New-Object Windows.GridLength(1, [Windows.GridUnitType]::Star)
     $grid.RowDefinitions.Add($rowDef1)
     $grid.RowDefinitions.Add($rowDef2)
     
-    # Title Bar
-    $titleBar = New-Object Windows.Controls.TextBlock
-    $titleBar.Text = "$Title ($([Math]::Round($Width)), $([Math]::Round($Height)))"
+    # Title Bar (Grid with drag handle + TextBox for selectable URL)
+    $titleContainer = New-Object Windows.Controls.Grid
+    $titleContainer.ColumnDefinitions.Add((New-Object Windows.Controls.ColumnDefinition -Property @{ Width = New-Object Windows.GridLength(18, [Windows.GridUnitType]::Pixel) }))
+    $titleContainer.ColumnDefinitions.Add((New-Object Windows.Controls.ColumnDefinition -Property @{ Width = New-Object Windows.GridLength(1, [Windows.GridUnitType]::Star) }))
+    
+    $dragHandle = New-Object Windows.Controls.Border
+    $dragHandle.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 30, 30, 30))
+    $dragHandle.Cursor = [Windows.Input.Cursors]::Hand
+    $dragHandle.ToolTip = "Drag panel"
+    [Windows.Controls.Grid]::SetColumn($dragHandle, 0)
+    $titleContainer.Children.Add($dragHandle) | Out-Null
+    
+    $titleBar = New-Object Windows.Controls.TextBox
+    $titleBar.Text = "$Title ($([Math]::Round($Width)), $([Math]::Round($Height))) - $Url"
+    $titleBar.IsReadOnly = $true
     $titleBar.Foreground = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 200, 200, 200))
     $titleBar.FontSize = 12
     $titleBar.Padding = New-Object Windows.Thickness(8, 5, 8, 5)
     $titleBar.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 30, 30, 30))
-    $titleBar.Cursor = [Windows.Input.Cursors]::Hand
-    [Windows.Controls.Grid]::SetRow($titleBar, 0)
-    [Windows.Controls.Panel]::SetZIndex($titleBar, 1000)  # Ensure title bar is always on top
-    $grid.Children.Add($titleBar) | Out-Null
+    $titleBar.BorderThickness = New-Object Windows.Thickness(0)
+    $titleBar.Cursor = [Windows.Input.Cursors]::IBeam
+    $titleBar.VerticalAlignment = [Windows.VerticalAlignment]::Top
+    $titleBar.TextWrapping = [Windows.TextWrapping]::NoWrap
+    $titleBar.HorizontalScrollBarVisibility = [Windows.Controls.ScrollBarVisibility]::Auto
+    $titleBar.Height = [double]::NaN  # Auto height based on content
+    [Windows.Controls.Grid]::SetColumn($titleBar, 1)
+    $titleContainer.Children.Add($titleBar) | Out-Null
+    
+    [Windows.Controls.Grid]::SetRow($titleContainer, 0)
+    [Windows.Controls.Panel]::SetZIndex($titleContainer, 1000)  # Ensure title bar is always on top
+    $grid.Children.Add($titleContainer) | Out-Null
     
     # Store original title for updates
     $titleBar | Add-Member -NotePropertyName OriginalTitle -NotePropertyValue $Title -Force
+    $titleBar | Add-Member -NotePropertyName OriginalUrl -NotePropertyValue $Url -Force
     
     # WebView2 Frame (placeholder - will be populated by PowerShell post-creation)
     $webViewBorder = New-Object Windows.Controls.Border
@@ -357,9 +378,21 @@ function New-DraggablePanel {
     $border | Add-Member -NotePropertyName WebViewContainer -NotePropertyValue $webViewBorder -Force
     $border | Add-Member -NotePropertyName TitleBar -NotePropertyValue $titleBar -Force
     
-    # Dragging logic
-    $titleBar.Add_MouseLeftButtonDown({
-        $wrapper = $this.Parent.Parent.Parent  # TextBlock -> Grid -> Border -> Wrapper Canvas
+    # Dragging logic (shared by drag handle and title text)
+    $dragStart = {
+        $wrapper = $this
+        while ($wrapper -and -not ($wrapper -is [Windows.Controls.Canvas] -and $wrapper.PSObject.Properties['PanelName'])) { $wrapper = $wrapper.Parent }
+        if (-not $wrapper) { return }
+        
+        # If nested inside a group, lift the panel to the root canvas so it can move freely
+        $parentCanvas = $wrapper.Parent
+        if ($parentCanvas -ne $script:panelCanvas -and $parentCanvas -is [Windows.Controls.Panel]) {
+            $origin = $wrapper.TransformToAncestor($script:panelCanvas).Transform([System.Windows.Point]::new(0,0))
+            $null = $parentCanvas.Children.Remove($wrapper)
+            $script:panelCanvas.Children.Add($wrapper) | Out-Null
+            [Windows.Controls.Canvas]::SetLeft($wrapper, $origin.X)
+            [Windows.Controls.Canvas]::SetTop($wrapper, $origin.Y)
+        }
         
         # Bring panel to front by removing and re-adding it (last child renders on top)
         if ($script:panelCanvas.Children.Contains($wrapper)) {
@@ -379,47 +412,50 @@ function New-DraggablePanel {
         $wrapper.DragStartX = $pos.X - $currentLeft
         $wrapper.DragStartY = $pos.Y - $currentTop
         $this.CaptureMouse() | Out-Null
-    })
+    }
     
-    $titleBar.Add_MouseMove({
-        $wrapper = $this.Parent.Parent.Parent
-        if ($wrapper.IsDragging) {
-            $pos = [Windows.Input.Mouse]::GetPosition($script:panelCanvas)
-            $newLeft = $pos.X - $wrapper.DragStartX
-            $newTop = $pos.Y - $wrapper.DragStartY
-            [Windows.Controls.Canvas]::SetLeft($wrapper, [Math]::Max(0, $newLeft))
-            [Windows.Controls.Canvas]::SetTop($wrapper, [Math]::Max(0, $newTop))
-            
-            # During drag, hide WebView2s of panels we're overlapping with
-            $myLeft = [Windows.Controls.Canvas]::GetLeft($wrapper)
-            $myTop = [Windows.Controls.Canvas]::GetTop($wrapper)
-            if ([Double]::IsNaN($myLeft)) { $myLeft = 0 }
-            if ([Double]::IsNaN($myTop)) { $myTop = 0 }
-            $myRight = $myLeft + $wrapper.Width
-            $myBottom = $myTop + $wrapper.Height
-            
-            foreach ($child in $script:panelCanvas.Children) {
-                if ($child -ne $wrapper -and $child.WebViewContainer) {
-                    $otherLeft = [Windows.Controls.Canvas]::GetLeft($child)
-                    $otherTop = [Windows.Controls.Canvas]::GetTop($child)
-                    if ([Double]::IsNaN($otherLeft)) { $otherLeft = 0 }
-                    if ([Double]::IsNaN($otherTop)) { $otherTop = 0 }
-                    $otherRight = $otherLeft + $child.Width
-                    $otherBottom = $otherTop + $child.Height
-                    
-                    # Check if rectangles overlap
-                    $overlaps = -not ($myRight -lt $otherLeft -or $myLeft -gt $otherRight -or $myBottom -lt $otherTop -or $myTop -gt $otherBottom)
-                    
-                    if ($overlaps -and $child.WebViewContainer.Child) {
-                        $child.WebViewContainer.Child.Visibility = [Windows.Visibility]::Hidden
-                    }
+    $dragMove = {
+        $wrapper = $this
+        while ($wrapper -and -not ($wrapper -is [Windows.Controls.Canvas] -and $wrapper.PSObject.Properties['PanelName'])) { $wrapper = $wrapper.Parent }
+        if (-not $wrapper -or -not $wrapper.IsDragging) { return }
+        
+        $pos = [Windows.Input.Mouse]::GetPosition($script:panelCanvas)
+        $newLeft = $pos.X - $wrapper.DragStartX
+        $newTop = $pos.Y - $wrapper.DragStartY
+        [Windows.Controls.Canvas]::SetLeft($wrapper, [Math]::Max(0, $newLeft))
+        [Windows.Controls.Canvas]::SetTop($wrapper, [Math]::Max(0, $newTop))
+        
+        # During drag, hide WebView2s of panels we're overlapping with
+        $myLeft = [Windows.Controls.Canvas]::GetLeft($wrapper)
+        $myTop = [Windows.Controls.Canvas]::GetTop($wrapper)
+        if ([Double]::IsNaN($myLeft)) { $myLeft = 0 }
+        if ([Double]::IsNaN($myTop)) { $myTop = 0 }
+        $myRight = $myLeft + $wrapper.Width
+        $myBottom = $myTop + $wrapper.Height
+        
+        foreach ($child in $script:panelCanvas.Children) {
+            if ($child -ne $wrapper -and $child.WebViewContainer) {
+                $otherLeft = [Windows.Controls.Canvas]::GetLeft($child)
+                $otherTop = [Windows.Controls.Canvas]::GetTop($child)
+                if ([Double]::IsNaN($otherLeft)) { $otherLeft = 0 }
+                if ([Double]::IsNaN($otherTop)) { $otherTop = 0 }
+                $otherRight = $otherLeft + $child.Width
+                $otherBottom = $otherTop + $child.Height
+                
+                # Check if rectangles overlap
+                $overlaps = -not ($myRight -lt $otherLeft -or $myLeft -gt $otherRight -or $myBottom -lt $otherTop -or $myTop -gt $otherBottom)
+                
+                if ($overlaps -and $child.WebViewContainer.Child) {
+                    $child.WebViewContainer.Child.Visibility = [Windows.Visibility]::Hidden
                 }
             }
         }
-    })
+    }
     
-    $titleBar.Add_MouseLeftButtonUp({
-        $wrapper = $this.Parent.Parent.Parent
+    $dragEnd = {
+        $wrapper = $this
+        while ($wrapper -and -not ($wrapper -is [Windows.Controls.Canvas] -and $wrapper.PSObject.Properties['PanelName'])) { $wrapper = $wrapper.Parent }
+        if (-not $wrapper) { return }
         $wrapper.IsDragging = $false
         $this.ReleaseMouseCapture() | Out-Null
         
@@ -429,7 +465,14 @@ function New-DraggablePanel {
                 $child.WebViewContainer.Child.Visibility = [Windows.Visibility]::Visible
             }
         }
-    })
+    }
+    
+    $titleBar.Add_MouseLeftButtonDown($dragStart)
+    $titleBar.Add_MouseMove($dragMove)
+    $titleBar.Add_MouseLeftButtonUp($dragEnd)
+    $dragHandle.Add_MouseLeftButtonDown($dragStart)
+    $dragHandle.Add_MouseMove($dragMove)
+    $dragHandle.Add_MouseLeftButtonUp($dragEnd)
     
     # Add resize handle (bottom-right corner)
     $resizeHandle = New-Object Windows.Controls.TextBlock
@@ -577,7 +620,7 @@ function New-DraggablePanel {
                 
                 # Update title bar with new dimensions
                 if ($wrapper.TitleBar) {
-                    $wrapper.TitleBar.Text = "$($wrapper.TitleBar.OriginalTitle) ($([Math]::Round($newWidth)), $([Math]::Round($newHeight)))"
+                    $wrapper.TitleBar.Text = "$($wrapper.TitleBar.OriginalTitle) ($([Math]::Round($newWidth)), $([Math]::Round($newHeight))) - $($wrapper.TitleBar.OriginalUrl)"
                 }
                 
                 # Update edge handle sizes
@@ -679,20 +722,41 @@ function Create-PanelOrGroup {
         [Windows.Controls.Canvas]::SetLeft($groupContainer, $Left)
         [Windows.Controls.Canvas]::SetTop($groupContainer, $Top)
         
-        # Add SizeChanged handler to resize children horizontally
+        # Add SizeChanged handler to resize children horizontally (honor ConfigWidth)
         $groupContainer.Add_SizeChanged({
             try {
                 $container = $this
                 $childCount = $container.Children.Count
                 if ($childCount -gt 0 -and $container.ActualWidth -gt 0) {
-                    $childWidth = $container.ActualWidth / $childCount
+                    # Calculate total configured width and count children without explicit width
+                    $totalConfigWidth = 0
+                    $childrenWithoutConfig = 0
+                    foreach ($child in $container.Children) {
+                        if ($child.ConfigWidth -ne $null -and $child.ConfigWidth -gt 0) {
+                            $totalConfigWidth += $child.ConfigWidth
+                        } else {
+                            $childrenWithoutConfig++
+                        }
+                    }
+                    
+                    # Remaining space divided among children without explicit width
+                    $remainingWidth = [Math]::Max(0, $container.ActualWidth - $totalConfigWidth)
+                    $dynamicWidth = if ($childrenWithoutConfig -gt 0) { $remainingWidth / $childrenWithoutConfig } else { 0 }
+                    
                     $childLeft = 0
                     foreach ($childControl in $container.Children) {
-                        $childControl.Width = $childWidth
+                        if ($childControl.ConfigWidth -ne $null -and $childControl.ConfigWidth -gt 0) {
+                            $childControl.Width = $childControl.ConfigWidth
+                        } else {
+                            $childControl.Width = $dynamicWidth
+                        }
                         $childControl.Height = $container.ActualHeight
                         [Windows.Controls.Canvas]::SetLeft($childControl, $childLeft)
                         [Windows.Controls.Canvas]::SetTop($childControl, 0)
-                        $childLeft += $childWidth
+                        if ($childControl.TitleBar) {
+                            $childControl.TitleBar.Text = "$($childControl.TitleBar.OriginalTitle) ($([Math]::Round($childControl.ActualWidth)), $([Math]::Round($childControl.ActualHeight))) - $($childControl.TitleBar.OriginalUrl)"
+                        }
+                        $childLeft += $childControl.Width
                     }
                 }
             }
@@ -747,6 +811,9 @@ function Create-PanelOrGroup {
                         $childControl.Height = $childHeight
                         [Windows.Controls.Canvas]::SetLeft($childControl, 0)
                         [Windows.Controls.Canvas]::SetTop($childControl, $childTop)
+                        if ($childControl.TitleBar) {
+                            $childControl.TitleBar.Text = "$($childControl.TitleBar.OriginalTitle) ($([Math]::Round($childControl.ActualWidth)), $([Math]::Round($childControl.ActualHeight))) - $($childControl.TitleBar.OriginalUrl)"
+                        }
                         $childTop += $childHeight
                     }
                 }
@@ -998,7 +1065,7 @@ $window.Add_SizeChanged({
                 
                 # Update title bar with new dimensions (only for panels, not groups)
                 if ($control.TitleBar) {
-                    $control.TitleBar.Text = "$($control.TitleBar.OriginalTitle) ($([Math]::Round($panelW)), $([Math]::Round($panelH)))"
+                    $control.TitleBar.Text = "$($control.TitleBar.OriginalTitle) ($([Math]::Round($panelW)), $([Math]::Round($panelH))) - $($control.TitleBar.OriginalUrl)"
                 }
                 
                 Write-Host "Control $($control.PanelName): Position ($leftOffset, $topPos), Size ($panelW x $panelH)" -ForegroundColor Gray
