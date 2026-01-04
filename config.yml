@@ -1,23 +1,23 @@
-panels:
-  - panels:
-      - name: calendar
-        title: Google Calendar
-        url: https://calendar.google.com
+- panels:
+    - name: calendar
+      title: Google Calendar
+      url: https://calendar.google.com
 
-      - name: photos
-        title: Google Photos
-        url: https://photos.google.com
+    - name: photos
+      title: Google Photos
+      url: https://photos.google.com
 
-  - panels:
-      - name: groceries
-        title: Our Groceries
-        url: https://www.ourgroceries.com/your-lists/list/MQ0VcOZaQr8UyWjeVQABSk
-        width: 200
+    - panels:
 
-      - name: tasks
-        title: Google Tasks
-        url: https://tasks.google.com
-        width: 300
-        script: scripts/google-tasks.js
+      - panels:
+          - name: groceries
+            title: Our Groceries
+            url: https://www.ourgroceries.com/your-lists/list/MQ0VcOZaQr8UyWjeVQABSk
+            width: 200
 
-
+      - panels:
+          - name: tasks
+            title: Google Tasks
+            url: https://tasks.google.com
+            width: 300
+            script: scripts/google-tasks.js

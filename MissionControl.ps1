@@ -75,82 +75,136 @@ if (-not (Test-Path $yamlPath)) {
     exit 1
 }
 
-# Simple YAML parser for nested panel row definitions
+# Recursive YAML parser for nested panel definitions
+function Parse-YamlPanels {
+    param(
+        [string]$Content,
+        [int]$IndentLevel = 4
+    )
+    
+    $items = @()
+    $indent = ' ' * $IndentLevel
+    $lines = $Content -split "`n"
+    $i = 0
+    
+    while ($i -lt $lines.Count) {
+        $line = $lines[$i]
+        
+        # Check if this is a nested panels group at current indent
+        if ($line -match "^$indent- panels:\s*$") {
+            Write-Host "DEBUG: Found nested panels group at indent $IndentLevel, line $i" -ForegroundColor Cyan
+            
+            # Find the extent of this nested group
+            $groupStart = $i + 1
+            $groupEnd = $groupStart
+            
+            # Scan ahead to find all content belonging to this group
+            while ($groupEnd -lt $lines.Count) {
+                $nextLine = $lines[$groupEnd]
+                # Stop if we hit another item at the same indent level
+                if ($nextLine -match "^$indent- " -and $groupEnd -gt $groupStart) {
+                    break
+                }
+                $groupEnd++
+            }
+            
+            # Extract the nested content
+            $nestedContent = ($lines[$groupStart..($groupEnd-1)] -join "`n")
+            Write-Host "DEBUG: Nested group content ($($groupEnd - $groupStart) lines)" -ForegroundColor Gray
+            
+            # Recursively parse the nested panels
+            $nestedPanels = Parse-YamlPanels -Content $nestedContent -IndentLevel ($IndentLevel + 2)
+            
+            if ($nestedPanels.Count -gt 0) {
+                $items += @{
+                    type = 'group'
+                    panels = $nestedPanels
+                }
+            }
+            
+            $i = $groupEnd
+            continue
+        }
+        # Check if this is a regular panel definition
+        elseif ($line -match "^$indent- name:\s*(.+)$") {
+            $panel = @{ 
+                type = 'panel'
+                name = $matches[1].Trim() 
+            }
+            
+            Write-Host "DEBUG: Found panel '$($panel.name)' at indent $IndentLevel" -ForegroundColor Gray
+            
+            # Parse panel properties
+            $i++
+            while ($i -lt $lines.Count) {
+                $propLine = $lines[$i]
+                
+                # Properties are 2 spaces more indented than the "- name:" line
+                if ($propLine -match "^\s{$($IndentLevel + 2)}title:\s*(.+)$") {
+                    $panel.title = $matches[1].Trim()
+                }
+                elseif ($propLine -match "^\s{$($IndentLevel + 2)}url:\s*(.+)$") {
+                    $panel.url = $matches[1].Trim()
+                }
+                elseif ($propLine -match "^\s{$($IndentLevel + 2)}width:\s*(\d+)$") {
+                    $panel.width = [int]$matches[1].Trim()
+                }
+                elseif ($propLine -match "^\s{$($IndentLevel + 2)}script:\s*(.+)$") {
+                    $panel.script = $matches[1].Trim()
+                }
+                elseif ($propLine -match "^$indent- ") {
+                    # Hit next item at same level
+                    break
+                }
+                elseif ($propLine.Trim() -eq '') {
+                    # Empty line, continue
+                    $i++
+                    continue
+                }
+                else {
+                    # Different indentation level
+                    break
+                }
+                $i++
+            }
+            
+            $items += $panel
+            continue
+        }
+        
+        $i++
+    }
+    
+    return $items
+}
+
 function Parse-Yaml {
     param([string]$FilePath)
     
-    $config = @{ panels = @() }
     $content = Get-Content $FilePath -Raw
     
-    # Look for top-level "panels:" keyword first
-    if ($content -notmatch 'panels:') {
-        Write-Host "⚠ No 'panels:' section found in config" -ForegroundColor Yellow
-        return $config
+    # Look for top-level "- panels:" (0 indent)
+    if ($content -notmatch '- panels:') {
+        Write-Host "⚠ No '- panels:' section found in config" -ForegroundColor Yellow
+        return @{ panels = @() }
     }
     
-    # Parse row groups - look for "  - panels:" (2 space indent under top-level panels:)
-    $rowPattern = '^\s{2}- panels:'
-    $rowMatches = [regex]::Matches($content, $rowPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
-    
-    Write-Host "DEBUG: Found $($rowMatches.Count) row(s)" -ForegroundColor Gray
-    
-    $rowIndex = 0
-    foreach ($rowMatch in $rowMatches) {
-        $rowStartIndex = $rowMatch.Index + $rowMatch.Length
-        
-        # Find the next row or end of file
-        $nextRowIndex = $content.Length
-        $nextMatch = [regex]::Match($content.Substring($rowStartIndex), $rowPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
-        if ($nextMatch.Success) {
-            $nextRowIndex = $rowStartIndex + $nextMatch.Index
-        }
-        
-        $rowContent = $content.Substring($rowStartIndex, $nextRowIndex - $rowStartIndex)
-        
-        Write-Host "DEBUG: Row $rowIndex content length: $($rowContent.Length)" -ForegroundColor Gray
-        Write-Host "DEBUG: Row $rowIndex preview: $($rowContent.Substring(0, [Math]::Min(200, $rowContent.Length)))" -ForegroundColor Gray
-        
-        # Parse panels by splitting on panel list items
-        $panelLines = $rowContent -split "`n" | Where-Object { $_.Trim() -ne '' }
-        $panels = @()
-        $currentPanel = $null
-        
-        foreach ($line in $panelLines) {
-            if ($line -match '^\s+- name:\s*(.+)$') {
-                # Start of new panel
-                if ($currentPanel) {
-                    $panels += $currentPanel
-                }
-                $currentPanel = @{ name = $matches[1].Trim() }
-            }
-            elseif ($currentPanel -and $line -match '^\s+title:\s*(.+)$') {
-                $currentPanel.title = $matches[1].Trim()
-            }
-            elseif ($currentPanel -and $line -match '^\s+url:\s*(.+)$') {
-                $currentPanel.url = $matches[1].Trim()
-            }
-            elseif ($currentPanel -and $line -match '^\s+width:\s*(\d+)$') {
-                $currentPanel.width = [int]$matches[1].Trim()
-            }
-            elseif ($currentPanel -and $line -match '^\s+script:\s*(.+)$') {
-                $currentPanel.script = $matches[1].Trim()
-            }
-        }
-        # Don't forget last panel
-        if ($currentPanel) {
-            $panels += $currentPanel
-        }
-        
-        Write-Host "DEBUG: Parsed $($panels.Count) panel(s) in row $rowIndex" -ForegroundColor Gray
-        
-        $row = @{
-            panels = $panels
-        }
-        $config.panels += $row
-        $rowIndex++
+    # Find first occurrence of "- panels:"
+    $match = [regex]::Match($content, '- panels:')
+    if (-not $match.Success) {
+        return @{ panels = @() }
     }
     
-    return $config
+    # Get content after first "- panels:"
+    $startIndex = $match.Index + $match.Length
+    $panelsContent = $content.Substring($startIndex)
+    
+    Write-Host "DEBUG: Parsing top-level panels (starting at indent 4)..." -ForegroundColor Cyan
+    $topLevelItems = Parse-YamlPanels -Content $panelsContent -IndentLevel 4
+    
+    Write-Host "DEBUG: Found $($topLevelItems.Count) top-level item(s)" -ForegroundColor Green
+    
+    return @{ panels = @( @{ panels = $topLevelItems } ) }
 }
 
 $config = Parse-Yaml -FilePath $yamlPath
@@ -530,18 +584,104 @@ function New-DraggablePanel {
     return $panelWrapper
 }
 
+# Recursive function to create panels or groups
+function Create-PanelOrGroup {
+    param(
+        [hashtable]$Item,
+        [double]$Left,
+        [double]$Top,
+        [double]$Width,
+        [double]$Height,
+        [int]$GridRow = 0,
+        [int]$GridCol = 0
+    )
+    
+    if ($Item.type -eq 'group') {
+        Write-Host "DEBUG: Creating group at ($Left, $Top) with $($Item.panels.Count) children" -ForegroundColor Magenta
+        
+        # Create a container for the group
+        $groupContainer = New-Object Windows.Controls.Canvas
+        $groupContainer.Width = $Width
+        $groupContainer.Height = $Height
+        $groupContainer.Background = [Windows.Media.Brushes]::Transparent
+        $groupContainer | Add-Member -NotePropertyName PanelName -NotePropertyValue "group_$GridRow_$GridCol" -Force
+        $groupContainer | Add-Member -NotePropertyName IsGroup -NotePropertyValue $true -Force
+        $groupContainer | Add-Member -NotePropertyName GridRow -NotePropertyValue $GridRow -Force
+        $groupContainer | Add-Member -NotePropertyName GridColumn -NotePropertyValue $GridCol -Force
+        
+        # Arrange children vertically within the group
+        $childCount = $Item.panels.Count
+        $childHeight = $Height / $childCount
+        $childTop = 0
+        
+        for ($i = 0; $i -lt $childCount; $i++) {
+            $child = $Item.panels[$i]
+            $childControl = Create-PanelOrGroup -Item $child -Left 0 -Top $childTop -Width $Width -Height $childHeight -GridRow $i -GridCol 0
+            if ($childControl) {
+                $groupContainer.Children.Add($childControl) | Out-Null
+            }
+            $childTop += $childHeight
+        }
+        
+        [Windows.Controls.Canvas]::SetLeft($groupContainer, $Left)
+        [Windows.Controls.Canvas]::SetTop($groupContainer, $Top)
+        
+        return $groupContainer
+    }
+    else {
+        # Create a regular panel
+        $panelControl = New-DraggablePanel -Name $Item.name -Title $Item.title -Url $Item.url -Left $Left -Top $Top -Width $Width -Height $Height
+        
+        # Store panel properties
+        $panelControl | Add-Member -NotePropertyName GridRow -NotePropertyValue $GridRow -Force
+        $panelControl | Add-Member -NotePropertyName GridColumn -NotePropertyValue $GridCol -Force
+        $panelControl | Add-Member -NotePropertyName ConfigWidth -NotePropertyValue $(if ($Item.ContainsKey('width')) { $Item.width } else { $null }) -Force
+        $panelControl | Add-Member -NotePropertyName ScriptPath -NotePropertyValue $(if ($Item.ContainsKey('script')) { $Item.script } else { $null }) -Force
+        $script:allPanels += $panelControl
+        
+        # Create and add WebView2 control
+        try {
+            if (-not $script:webView2Available) {
+                throw "WebView2 runtime not available"
+            }
+            
+            $webView = New-Object Microsoft.Web.WebView2.Wpf.WebView2
+            $webView.HorizontalAlignment = [Windows.HorizontalAlignment]::Stretch
+            $webView.VerticalAlignment = [Windows.VerticalAlignment]::Stretch
+            
+            # Add WebView2 to the container
+            $container = $panelControl.InnerBorder.Child.Children[1]
+            $container.Child = $webView
+            
+            # Store for later initialization
+            $script:webViewsToInitialize += @{
+                WebView = $webView
+                Url = $Item.url
+                Name = $Item.name
+                ScriptPath = $(if ($Item.ContainsKey('script')) { $Item.script } else { $null })
+            }
+            
+            Write-Host "✓ Created WebView2 panel for $($Item.name): $($Item.url)" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "⚠ Failed to create WebView2 for $($Item.name): $_" -ForegroundColor Yellow
+        }
+        
+        return $panelControl
+    }
+}
+
 # Create panels from config
 $script:webViewsToInitialize = @()
 $script:allPanels = @()
 $script:rows = @()
 
-# Initial size - will be updated after window loads
+# Initial size
 $panelWidth = 600
 $panelHeight = 387
 
 $rowIndex = 0
 foreach ($row in $config.panels) {
-    # Each row should have a 'panels' property with array of panels
     if (-not $row.ContainsKey('panels')) {
         Write-Host "⚠ Row $rowIndex missing 'panels' property, skipping" -ForegroundColor Yellow
         continue
@@ -549,69 +689,33 @@ foreach ($row in $config.panels) {
     
     $rowInfo = @{
         index = $rowIndex
-        panels = @()
+        items = $row.panels
+        controls = @()
     }
     
     $col = 0
     $rowLeftOffset = 0
-    foreach ($panel in $row.panels) {
-        # Use specified width or default
-        $thisWidth = if ($panel.ContainsKey('width')) { $panel.width } else { $panelWidth }
+    
+    foreach ($item in $row.panels) {
+        # Determine width
+        $thisWidth = if ($item.type -eq 'panel' -and $item.ContainsKey('width')) { 
+            $item.width 
+        } else { 
+            $panelWidth 
+        }
         
         $top = $rowIndex * $panelHeight
         $left = $rowLeftOffset
         
-        $panelControl = New-DraggablePanel -Name $panel.name -Title $panel.title -Url $panel.url -Left $left -Top $top -Width $thisWidth -Height $panelHeight
+        $control = Create-PanelOrGroup -Item $item -Left $left -Top $top -Width $thisWidth -Height $panelHeight -GridRow $rowIndex -GridCol $col
         
-        # Store panel with grid position and custom width for later resizing
-        $panelControl | Add-Member -NotePropertyName GridRow -NotePropertyValue $rowIndex -Force
-        $panelControl | Add-Member -NotePropertyName GridColumn -NotePropertyValue $col -Force
-        $panelControl | Add-Member -NotePropertyName ConfigWidth -NotePropertyValue $(if ($panel.ContainsKey('width')) { $panel.width } else { $null }) -Force
-        $panelControl | Add-Member -NotePropertyName ScriptPath -NotePropertyValue $(if ($panel.ContainsKey('script')) { $panel.script } else { $null }) -Force
-        $script:allPanels += $panelControl
-        $rowInfo.panels += $panelControl
+        if ($control) {
+            $script:panelCanvas.Children.Add($control) | Out-Null
+            $rowInfo.controls += $control
+        }
         
         $rowLeftOffset += $thisWidth
         $col += 1
-        
-        # Create and add WebView2 control
-        try {
-            if (-not $script:webView2Available) {
-                throw "WebView2 runtime not available. Please install from https://developer.microsoft.com/en-us/microsoft-edge/webview2/"
-            }
-            
-            $webView = New-Object Microsoft.Web.WebView2.Wpf.WebView2
-            $webView.HorizontalAlignment = [Windows.HorizontalAlignment]::Stretch
-            $webView.VerticalAlignment = [Windows.VerticalAlignment]::Stretch
-            
-            # Add WebView2 to the container first (must be in visual tree before initialization)
-            $container = $panelControl.InnerBorder.Child.Children[1]  # Get WebViewContainer from Grid
-            $container.Child = $webView
-            
-            # Store for later initialization (after window is loaded)
-            $script:webViewsToInitialize += @{
-                WebView = $webView
-                Url = $panel.url
-                Name = $panel.name
-                ScriptPath = $(if ($panel.ContainsKey('script')) { $panel.script } else { $null })
-            }
-            
-            Write-Host "✓ Created WebView2 panel for $($panel.name): $($panel.url)" -ForegroundColor Green
-        }
-        catch {
-            Write-Host "⚠ Failed to create WebView2 for $($panel.name): $_" -ForegroundColor Yellow
-            # Create fallback text block
-            $fallback = New-Object Windows.Controls.TextBlock
-            $fallback.Text = "WebView2 Error:`n$_`n`nURL: $($panel.url)"
-            $fallback.Foreground = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 200, 100, 100))
-            $fallback.TextWrapping = [Windows.TextWrapping]::Wrap
-            $fallback.Padding = New-Object Windows.Thickness(10)
-            $fallback.FontSize = 11
-            $container = $panelControl.InnerBorder.Child.Children[1]
-            $container.Child = $fallback
-        }
-        
-        $script:panelCanvas.Children.Add($panelControl) | Out-Null
     }
     
     $rowInfo | Add-Member -NotePropertyName ColumnCount -NotePropertyValue $col -Force
@@ -638,40 +742,42 @@ $window.Add_ContentRendered({
     
     # Process each row to calculate positions and handle custom widths
     foreach ($rowInfo in $script:rows) {
-        $rowPanels = $rowInfo.panels
+        $rowControls = $rowInfo.controls
         $leftOffset = 0
         
-        foreach ($panel in $rowPanels) {
+        foreach ($control in $rowControls) {
             # Use configured width or calculate proportional width
-            if ($panel.ConfigWidth -ne $null) {
-                $panelW = $panel.ConfigWidth
+            if ($control.ConfigWidth -ne $null) {
+                $panelW = $control.ConfigWidth
             } else {
-                # Calculate remaining width for panels without explicit width
-                $totalConfiguredWidth = ($rowPanels | Where-Object { $_.ConfigWidth -ne $null } | ForEach-Object { $_.ConfigWidth } | Measure-Object -Sum).Sum
-                $panelsWithoutWidth = ($rowPanels | Where-Object { $_.ConfigWidth -eq $null }).Count
-                if ($panelsWithoutWidth -gt 0) {
-                    $panelW = ($canvasWidth - $totalConfiguredWidth) / $panelsWithoutWidth
+                # Calculate remaining width for controls without explicit width
+                $totalConfiguredWidth = ($rowControls | Where-Object { $_.ConfigWidth -ne $null } | ForEach-Object { $_.ConfigWidth } | Measure-Object -Sum).Sum
+                $controlsWithoutWidth = ($rowControls | Where-Object { $_.ConfigWidth -eq $null }).Count
+                if ($controlsWithoutWidth -gt 0) {
+                    $panelW = ($canvasWidth - $totalConfiguredWidth) / $controlsWithoutWidth
                 } else {
-                    $panelW = $canvasWidth / $rowPanels.Count
+                    $panelW = $canvasWidth / $rowControls.Count
                 }
             }
             
-            $panel.Width = $panelW
-            $panel.Height = $panelH
-            $panel.InnerBorder.Width = $panelW
-            $panel.InnerBorder.Height = $panelH
-            
-            $topPos = $panel.GridRow * $panelH
-            
-            [Windows.Controls.Canvas]::SetLeft($panel, $leftOffset)
-            [Windows.Controls.Canvas]::SetTop($panel, $topPos)
-            
-            # Update title bar with initial dimensions
-            if ($panel.TitleBar) {
-                $panel.TitleBar.Text = "$($panel.TitleBar.OriginalTitle) ($([Math]::Round($panelW)), $([Math]::Round($panelH)))"
+            $control.Width = $panelW
+            $control.Height = $panelH
+            if ($control.InnerBorder) {
+                $control.InnerBorder.Width = $panelW
+                $control.InnerBorder.Height = $panelH
             }
             
-            Write-Host "Panel $($panel.PanelName): Position ($leftOffset, $topPos), Size ($panelW x $panelH)" -ForegroundColor Gray
+            $topPos = $control.GridRow * $panelH
+            
+            [Windows.Controls.Canvas]::SetLeft($control, $leftOffset)
+            [Windows.Controls.Canvas]::SetTop($control, $topPos)
+            
+            # Update title bar with initial dimensions (only for panels, not groups)
+            if ($control.TitleBar) {
+                $control.TitleBar.Text = "$($control.TitleBar.OriginalTitle) ($([Math]::Round($panelW)), $([Math]::Round($panelH)))"
+            }
+            
+            Write-Host "Control $($control.PanelName): Position ($leftOffset, $topPos), Size ($panelW x $panelH)" -ForegroundColor Gray
             
             $leftOffset += $panelW
         }
@@ -782,36 +888,40 @@ $window.Add_SizeChanged({
         
         # Process each row to calculate positions and handle custom widths
         foreach ($rowInfo in $script:rows) {
-            $rowPanels = $rowInfo.panels
+            $rowControls = $rowInfo.controls
             $leftOffset = 0
             
-            foreach ($panel in $rowPanels) {
+            foreach ($control in $rowControls) {
                 # Use configured width or calculate proportional width
-                if ($panel.ConfigWidth -ne $null) {
-                    $panelW = $panel.ConfigWidth
+                if ($control.ConfigWidth -ne $null) {
+                    $panelW = $control.ConfigWidth
                 } else {
-                    # Calculate remaining width for panels without explicit width
-                    $totalConfiguredWidth = ($rowPanels | Where-Object { $_.ConfigWidth -ne $null } | ForEach-Object { $_.ConfigWidth } | Measure-Object -Sum).Sum
-                    $panelsWithoutWidth = ($rowPanels | Where-Object { $_.ConfigWidth -eq $null }).Count
-                    if ($panelsWithoutWidth -gt 0) {
-                        $panelW = ($canvasWidth - $totalConfiguredWidth) / $panelsWithoutWidth
+                    # Calculate remaining width for controls without explicit width
+                    $totalConfiguredWidth = ($rowControls | Where-Object { $_.ConfigWidth -ne $null } | ForEach-Object { $_.ConfigWidth } | Measure-Object -Sum).Sum
+                    $controlsWithoutWidth = ($rowControls | Where-Object { $_.ConfigWidth -eq $null }).Count
+                    if ($controlsWithoutWidth -gt 0) {
+                        $panelW = ($canvasWidth - $totalConfiguredWidth) / $controlsWithoutWidth
                     } else {
-                        $panelW = $canvasWidth / $rowPanels.Count
+                        $panelW = $canvasWidth / $rowControls.Count
                     }
                 }
                 
-                $panel.Width = $panelW
-                $panel.Height = $panelH
-                $panel.InnerBorder.Width = $panelW
-                $panel.InnerBorder.Height = $panelH
-                
-                [Windows.Controls.Canvas]::SetLeft($panel, $leftOffset)
-                [Windows.Controls.Canvas]::SetTop($panel, $panel.GridRow * $panelH)
-                
-                # Update title bar with new dimensions
-                if ($panel.TitleBar) {
-                    $panel.TitleBar.Text = "$($panel.TitleBar.OriginalTitle) ($([Math]::Round($panelW)), $([Math]::Round($panelH)))"
+                $control.Width = $panelW
+                $control.Height = $panelH
+                if ($control.InnerBorder) {
+                    $control.InnerBorder.Width = $panelW
+                    $control.InnerBorder.Height = $panelH
                 }
+                
+                [Windows.Controls.Canvas]::SetLeft($control, $leftOffset)
+                [Windows.Controls.Canvas]::SetTop($control, $control.GridRow * $panelH)
+                
+                # Update title bar with new dimensions (only for panels, not groups)
+                if ($control.TitleBar) {
+                    $control.TitleBar.Text = "$($control.TitleBar.OriginalTitle) ($([Math]::Round($panelW)), $([Math]::Round($panelH)))"
+                }
+                
+                Write-Host "Control $($control.PanelName): Position ($leftOffset, $topPos), Size ($panelW x $panelH)" -ForegroundColor Gray
                 
                 $leftOffset += $panelW
             }
