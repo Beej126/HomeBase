@@ -17,3 +17,7 @@
       url: https://tasks.google.com
       width: 300
       script: scripts/google-tasks.js
+
+    - title: Google Tasks
+      url: https://google.com
+      width: 300

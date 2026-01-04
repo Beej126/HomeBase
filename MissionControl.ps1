@@ -251,13 +251,178 @@ function Parse-Yaml {
     return @{ panels = @( @{ panels = $topLevelItems } ) }
 }
 
+# Build panel windows from current config and canvas size
+function Build-PanelWindows {
+    param($OwnerWindow)
+
+    # Close existing windows
+    $script:panelWindows | ForEach-Object {
+        try { $_.Close() } catch { }
+    }
+    $script:panelWindows = @()
+    $script:webViewsToInitialize = @()
+
+    if ($config.panels.Count -eq 0 -or $config.panels[0].panels.Count -eq 0) { return }
+    $topItem = $config.panels[0].panels[0]
+    $canvasRect = Get-CanvasScreenRect -Canvas $script:panelCanvas -OwnerWindow $OwnerWindow
+    Write-Host "Canvas screen rect: L=$($canvasRect.Left) T=$($canvasRect.Top) W=$($canvasRect.Width) H=$($canvasRect.Height)" -ForegroundColor Yellow
+    $rects = Get-PanelRects -Item $topItem -Left $canvasRect.Left -Top $canvasRect.Top -Width $canvasRect.Width -Height $canvasRect.Height
+    Write-Host "Layout produced $($rects.Count) panel rects" -ForegroundColor Cyan
+    foreach ($rect in $rects) {
+        Write-Host "  Panel rect: L=$($rect.left) T=$($rect.top) W=$($rect.width) H=$($rect.height)" -ForegroundColor Gray
+        $win = New-PanelWindow -Owner $OwnerWindow -Rect $rect -CanvasRect $canvasRect
+        if ($win) { $script:panelWindows += $win }
+    }
+    Write-Host "✓ Created $($script:panelWindows.Count) panel windows" -ForegroundColor Green
+    Write-Host "✓ Queued $($script:webViewsToInitialize.Count) WebView2 controls for initialization" -ForegroundColor Green
+}
+
+# Reposition child panel windows when the owner window moves
+function Update-PanelWindowPositions {
+    param($OwnerWindow)
+    if (-not $script:panelCanvas) { return }
+    $canvasRect = Get-CanvasScreenRect -Canvas $script:panelCanvas -OwnerWindow $OwnerWindow
+    foreach ($win in $script:panelWindows) {
+        if (-not $win -or -not $win.Tag) { continue }
+        $state = $win.Tag
+        if (-not $state.PSObject.Properties.Match('RelativeLeft')) { continue }
+        $win.Left = $canvasRect.Left + $state.RelativeLeft
+        $win.Top = $canvasRect.Top + $state.RelativeTop
+        $state.CanvasRect = $canvasRect
+    }
+}
+
+# Initialize queued WebView2 controls using shared environment
+function Initialize-WebViews {
+    param(
+        [string]$UserDataFolder,
+        [string]$ScriptDirectory
+    )
+
+    $webViewList = $script:webViewsToInitialize
+    $scriptDir = $ScriptDirectory
+
+    Write-Host "Creating WebView2 environment..." -ForegroundColor Cyan
+    $envTask = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $UserDataFolder, $null)
+
+    $envTask.GetAwaiter().OnCompleted({
+        try {
+            $sharedEnv = $envTask.GetAwaiter().GetResult()
+            Write-Host "✓ WebView2 environment ready" -ForegroundColor Green
+
+            foreach ($item in $webViewList) {
+                $webView = $item['WebView']
+                $url = $item['Url']
+                $name = $item['Name']
+                $scriptPath = $item['ScriptPath']
+
+                $scriptContent = $null
+                if ($scriptPath) {
+                    $fullScriptPath = Join-Path $scriptDir $scriptPath
+                    if (Test-Path $fullScriptPath) {
+                        $scriptContent = Get-Content $fullScriptPath -Raw
+                        Write-Host "✓ Loaded script for $name : $scriptPath ($($scriptContent.Length) chars)" -ForegroundColor Cyan
+                    } else {
+                        Write-Host "⚠ Script file not found for $name : $fullScriptPath" -ForegroundColor Yellow
+                    }
+                }
+
+                try {
+                    $initTask = $webView.EnsureCoreWebView2Async($sharedEnv)
+                    $localWebView = $webView
+                    $localUrl = $url
+                    $localName = if ([string]::IsNullOrWhiteSpace($name)) { 'panel' } else { $name }
+                    $localScript = $scriptContent
+                    $localInjectLog = "✓ Injected script for $localName"
+
+                    $initTask.GetAwaiter().OnCompleted({
+                        try {
+                            if ($localScript) {
+                                $localWebView.add_NavigationCompleted({
+                                    param($sender, $args)
+                                    try {
+                                        Write-Host $localInjectLog -ForegroundColor Magenta
+                                        $sender.CoreWebView2.ExecuteScriptAsync($localScript) | Out-Null
+                                    }
+                                    catch {
+                                        Write-Host "⚠ Failed to inject script for $localName : $_" -ForegroundColor Yellow
+                                    }
+                                })
+                            }
+
+                            $localWebView.Source = [System.Uri]::new($localUrl)
+                            Write-Host "✓ Navigated $localName to $localUrl" -ForegroundColor Cyan
+                        }
+                        catch {
+                            Write-Host "⚠ Failed to navigate $localName : $_" -ForegroundColor Yellow
+                        }
+                    }.GetNewClosure())
+                }
+                catch {
+                    Write-Host "⚠ Failed to initialize WebView2 for $name : $_" -ForegroundColor Yellow
+                }
+            }
+        }
+        catch {
+            Write-Host "⚠ Failed to create WebView2 environment: $_" -ForegroundColor Yellow
+        }
+    }.GetNewClosure())
+}
+
+# Compute panel rectangles from hgroup/vgroup definitions (no visuals)
+function Get-PanelRects {
+    param(
+        $Item,
+        [double]$Left,
+        [double]$Top,
+        [double]$Width,
+        [double]$Height
+    )
+    $rects = @()
+    switch ($Item.type) {
+        'hgroup' {
+            $children = $Item.panels
+            $totalConfig = ($children | Where-Object { $_.width } | ForEach-Object { $_.width } | Measure-Object -Sum).Sum
+            $flexCount = ($children | Where-Object { -not $_.width }).Count
+            $flexWidth = if ($flexCount -gt 0) { [Math]::Max(0, ($Width - $totalConfig)) / $flexCount } else { 0 }
+            $x = $Left
+            foreach ($child in $children) {
+                $w = if ($child.width) { $child.width } else { $flexWidth }
+                $rects += Get-PanelRects -Item $child -Left $x -Top $Top -Width $w -Height $Height
+                $x += $w
+            }
+        }
+        'vgroup' {
+            $children = $Item.panels
+            if ($children.Count -gt 0) {
+                $h = $Height / [double]$children.Count
+                $y = $Top
+                foreach ($child in $children) {
+                    $rects += Get-PanelRects -Item $child -Left $Left -Top $y -Width $Width -Height $h
+                    $y += $h
+                }
+            }
+        }
+        default {
+            $rects += [ordered]@{
+                item   = $Item
+                left   = $Left
+                top    = $Top
+                width  = $Width
+                height = $Height
+            }
+        }
+    }
+    return $rects
+}
+
 $config = Parse-Yaml -FilePath $yamlPath
 
 # XAML Definition for Main Window
 $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Mission Control" 
+        Title="Mission Control (double click panel title bars to copy url to clipboard)" 
         Height="800" 
         Width="1200"
         WindowStartupLocation="CenterScreen"
@@ -327,30 +492,21 @@ function New-DraggablePanel {
     
     # Title Bar (Grid with drag handle + TextBox for selectable URL)
     $titleContainer = New-Object Windows.Controls.Grid
-    $titleContainer.ColumnDefinitions.Add((New-Object Windows.Controls.ColumnDefinition -Property @{ Width = New-Object Windows.GridLength(18, [Windows.GridUnitType]::Pixel) }))
+    $titleContainer.Height = 28
+    $titleContainer.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 25, 25, 28))
     $titleContainer.ColumnDefinitions.Add((New-Object Windows.Controls.ColumnDefinition -Property @{ Width = New-Object Windows.GridLength(1, [Windows.GridUnitType]::Star) }))
     
-    $dragHandle = New-Object Windows.Controls.Border
-    $dragHandle.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 30, 30, 30))
-    $dragHandle.Cursor = [Windows.Input.Cursors]::Hand
-    $dragHandle.ToolTip = "Drag panel"
-    [Windows.Controls.Grid]::SetColumn($dragHandle, 0)
-    $titleContainer.Children.Add($dragHandle) | Out-Null
-    
-    $titleBar = New-Object Windows.Controls.TextBox
+    $titleBar = New-Object Windows.Controls.TextBlock
     $titleBar.Text = "$Title ($([Math]::Round($Width)), $([Math]::Round($Height))) - $Url"
-    $titleBar.IsReadOnly = $true
     $titleBar.Foreground = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 200, 200, 200))
     $titleBar.FontSize = 12
     $titleBar.Padding = New-Object Windows.Thickness(8, 5, 8, 5)
     $titleBar.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 30, 30, 30))
-    $titleBar.BorderThickness = New-Object Windows.Thickness(0)
-    $titleBar.Cursor = [Windows.Input.Cursors]::IBeam
+    $titleBar.Cursor = [Windows.Input.Cursors]::Hand
     $titleBar.VerticalAlignment = [Windows.VerticalAlignment]::Top
-    $titleBar.TextWrapping = [Windows.TextWrapping]::NoWrap
-    $titleBar.HorizontalScrollBarVisibility = [Windows.Controls.ScrollBarVisibility]::Auto
+    $titleBar.TextTrimming = [Windows.TextTrimming]::CharacterEllipsis
     $titleBar.Height = [double]::NaN  # Auto height based on content
-    [Windows.Controls.Grid]::SetColumn($titleBar, 1)
+    [Windows.Controls.Grid]::SetColumn($titleBar, 0)
     $titleContainer.Children.Add($titleBar) | Out-Null
     
     [Windows.Controls.Grid]::SetRow($titleContainer, 0)
@@ -380,6 +536,8 @@ function New-DraggablePanel {
     
     # Dragging logic (shared by drag handle and title text)
     $dragStart = {
+        param($sender, $e)
+        if ($e -and $e.ClickCount -gt 1) { return }
         $wrapper = $this
         while ($wrapper -and -not ($wrapper -is [Windows.Controls.Canvas] -and $wrapper.PSObject.Properties['PanelName'])) { $wrapper = $wrapper.Parent }
         if (-not $wrapper) { return }
@@ -467,12 +625,28 @@ function New-DraggablePanel {
         }
     }
     
+    # Make the entire title surface draggable
+    $titleContainer.Add_MouseLeftButtonDown($dragStart)
+    $titleContainer.Add_MouseMove($dragMove)
+    $titleContainer.Add_MouseLeftButtonUp($dragEnd)
     $titleBar.Add_MouseLeftButtonDown($dragStart)
     $titleBar.Add_MouseMove($dragMove)
     $titleBar.Add_MouseLeftButtonUp($dragEnd)
-    $dragHandle.Add_MouseLeftButtonDown($dragStart)
-    $dragHandle.Add_MouseMove($dragMove)
-    $dragHandle.Add_MouseLeftButtonUp($dragEnd)
+
+    $copyUrlHandler = {
+        param($sender, $e)
+        if (-not $e -or $e.ClickCount -ne 2) { return }
+        try {
+            $urlToCopy = $Title  # fallback
+            if ($titleBar.PSObject.Properties['OriginalUrl']) { $urlToCopy = $titleBar.OriginalUrl }
+            if ([string]::IsNullOrWhiteSpace($urlToCopy)) { return }
+            [System.Windows.Clipboard]::SetText($urlToCopy)
+            Write-Host "✓ Copied URL from panel title: $urlToCopy" -ForegroundColor Cyan
+            $e.Handled = $true
+        }
+        catch { }
+    }
+    $titleBar.Add_MouseLeftButtonDown($copyUrlHandler)
     
     # Add resize handle (bottom-right corner)
     $resizeHandle = New-Object Windows.Controls.TextBlock
@@ -672,6 +846,434 @@ function New-DraggablePanel {
     return $panelWrapper
 }
 
+# Compute screen-space bounds of the canvas for clamping child windows
+function Get-CanvasScreenRect {
+    param($Canvas, $OwnerWindow)
+    # Get owner window screen position
+    $ownerScreen = [System.Windows.Point]::new($OwnerWindow.Left, $OwnerWindow.Top)
+    # Get canvas position relative to owner window content
+    $canvasRelative = $Canvas.TransformToAncestor($OwnerWindow).Transform([System.Windows.Point]::new(0,0))
+    # Compute absolute screen position with fine-tuning offsets
+    $screenLeft = $ownerScreen.X + $canvasRelative.X + 7
+    $screenTop = $ownerScreen.Y + $canvasRelative.Y + 25
+    $width = $Canvas.ActualWidth
+    $height = $Canvas.ActualHeight
+    return [ordered]@{
+        Left = $screenLeft
+        Top = $screenTop
+        Width = $width
+        Height = $height
+        Right = $screenLeft + $width
+        Bottom = $screenTop + $height
+    }
+}
+
+# Create a borderless owned window hosting a single panel
+function New-PanelWindow {
+    param(
+        [Windows.Window]$Owner,
+        [hashtable]$Rect,
+        [hashtable]$CanvasRect
+    )
+
+    $item = $Rect.item
+    $title = $item.title
+    $url = $item.url
+    $name = if ([string]::IsNullOrWhiteSpace($item.name)) { 'panel' } else { $item.name }
+
+    $win = New-Object Windows.Window
+    $win.Owner = $Owner
+    $win.WindowStyle = [Windows.WindowStyle]::None
+    $win.ResizeMode = [Windows.ResizeMode]::NoResize
+    $win.ShowInTaskbar = $false
+    $win.Topmost = $false
+    $win.Background = [Windows.Media.Brushes]::Transparent
+    $win.Left = $Rect.left
+    $win.Top = $Rect.top
+    $win.Width = $Rect.width
+    $win.Height = $Rect.height
+
+    # Root border
+    $border = New-Object Windows.Controls.Border
+    $border.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 45, 45, 50))
+    $border.BorderBrush = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 100, 100, 100))
+    $border.BorderThickness = New-Object Windows.Thickness(1)
+    $border.CornerRadius = New-Object Windows.CornerRadius(5)
+
+    $grid = New-Object Windows.Controls.Grid
+    $rowDef1 = New-Object Windows.Controls.RowDefinition
+    $rowDef1.Height = [Windows.GridLength]::Auto
+    $rowDef2 = New-Object Windows.Controls.RowDefinition
+    $rowDef2.Height = New-Object Windows.GridLength(1, [Windows.GridUnitType]::Star)
+    $grid.RowDefinitions.Add($rowDef1)
+    $grid.RowDefinitions.Add($rowDef2)
+
+    # Title container
+    $titleContainer = New-Object Windows.Controls.Grid
+    $titleContainer.ColumnDefinitions.Add((New-Object Windows.Controls.ColumnDefinition -Property @{ Width = New-Object Windows.GridLength(1, [Windows.GridUnitType]::Star) }))
+
+    $titleBar = New-Object Windows.Controls.TextBlock
+    $titleBar.Text = "$title ($([Math]::Round($Rect.width)), $([Math]::Round($Rect.height))) - $url"
+    $titleBar.Foreground = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 200, 200, 200))
+    $titleBar.FontSize = 12
+    $titleBar.Padding = New-Object Windows.Thickness(8, 5, 8, 5)
+    $titleBar.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 30, 30, 30))
+    $titleBar.Cursor = [Windows.Input.Cursors]::Hand
+    $titleBar.VerticalAlignment = [Windows.VerticalAlignment]::Top
+    $titleBar.TextTrimming = [Windows.TextTrimming]::CharacterEllipsis
+    $titleBar.Height = [double]::NaN
+    [Windows.Controls.Grid]::SetColumn($titleBar, 0)
+    $titleContainer.Children.Add($titleBar) | Out-Null
+
+    [Windows.Controls.Grid]::SetRow($titleContainer, 0)
+    [Windows.Controls.Panel]::SetZIndex($titleContainer, 1000)
+    $grid.Children.Add($titleContainer) | Out-Null
+
+    # WebView host
+    $webViewBorder = New-Object Windows.Controls.Border
+    $webViewBorder.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromArgb(255, 25, 25, 26))
+    $webViewBorder.ClipToBounds = $true
+    # Leave inset on sides/bottom for resize handles; flush to title bar on top
+    $webViewBorder.Margin = New-Object Windows.Thickness(6,0,6,6)
+    [Windows.Controls.Grid]::SetRow($webViewBorder, 1)
+    [Windows.Controls.Panel]::SetZIndex($webViewBorder, 1)
+    $grid.Children.Add($webViewBorder) | Out-Null
+
+    # Edge/corner resize handles all around
+    $edgeThickness = 6
+    $cornerSize = 12
+
+    $resizeTop = New-Object Windows.Controls.Border
+    $resizeTop.Height = $edgeThickness
+    $resizeTop.Background = [Windows.Media.Brushes]::Transparent
+    $resizeTop.Cursor = [Windows.Input.Cursors]::SizeNS
+    $resizeTop.VerticalAlignment = [Windows.VerticalAlignment]::Top
+    $resizeTop.Margin = New-Object Windows.Thickness($cornerSize,0,$cornerSize,0)  # leave corners unobstructed
+    $resizeTop.Tag = @{ Top = $true; Bottom = $false; Left = $false; Right = $false }
+    [Windows.Controls.Grid]::SetRow($resizeTop, 0)
+    [Windows.Controls.Grid]::SetColumn($resizeTop, 0)
+    [Windows.Controls.Grid]::SetColumnSpan($resizeTop, 2)
+    [Windows.Controls.Grid]::SetZIndex($resizeTop, 3000)
+    $grid.Children.Add($resizeTop) | Out-Null
+
+    $resizeBottom = New-Object Windows.Controls.Border
+    $resizeBottom.Height = $edgeThickness
+    $resizeBottom.Background = [Windows.Media.Brushes]::Transparent
+    $resizeBottom.Cursor = [Windows.Input.Cursors]::SizeNS
+    $resizeBottom.VerticalAlignment = [Windows.VerticalAlignment]::Bottom
+    $resizeBottom.Margin = New-Object Windows.Thickness($cornerSize,0,$cornerSize,0)  # leave corners unobstructed
+    $resizeBottom.Tag = @{ Top = $false; Bottom = $true; Left = $false; Right = $false }
+    [Windows.Controls.Grid]::SetRow($resizeBottom, 1)
+    [Windows.Controls.Grid]::SetColumn($resizeBottom, 0)
+    [Windows.Controls.Grid]::SetColumnSpan($resizeBottom, 2)
+    [Windows.Controls.Grid]::SetZIndex($resizeBottom, 3000)
+    $grid.Children.Add($resizeBottom) | Out-Null
+
+    $resizeLeft = New-Object Windows.Controls.Border
+    $resizeLeft.Width = $edgeThickness
+    $resizeLeft.Background = [Windows.Media.Brushes]::Transparent
+    $resizeLeft.Cursor = [Windows.Input.Cursors]::SizeWE
+    $resizeLeft.VerticalAlignment = [Windows.VerticalAlignment]::Stretch
+    $resizeLeft.HorizontalAlignment = [Windows.HorizontalAlignment]::Left
+    $resizeLeft.Margin = New-Object Windows.Thickness(0,$cornerSize,0,$cornerSize)  # leave corners unobstructed
+    $resizeLeft.Tag = @{ Top = $false; Bottom = $false; Left = $true; Right = $false }
+    [Windows.Controls.Grid]::SetRow($resizeLeft, 0)
+    [Windows.Controls.Grid]::SetRowSpan($resizeLeft, 2)
+    [Windows.Controls.Grid]::SetColumn($resizeLeft, 0)
+    [Windows.Controls.Grid]::SetZIndex($resizeLeft, 3000)
+    $grid.Children.Add($resizeLeft) | Out-Null
+
+    $resizeRight = New-Object Windows.Controls.Border
+    $resizeRight.Width = $edgeThickness
+    $resizeRight.Background = [Windows.Media.Brushes]::Transparent
+    $resizeRight.Cursor = [Windows.Input.Cursors]::SizeWE
+    $resizeRight.HorizontalAlignment = [Windows.HorizontalAlignment]::Right
+    $resizeRight.VerticalAlignment = [Windows.VerticalAlignment]::Stretch
+    $resizeRight.Margin = New-Object Windows.Thickness(0,$cornerSize,0,$cornerSize)  # leave corners unobstructed
+    $resizeRight.Tag = @{ Top = $false; Bottom = $false; Left = $false; Right = $true }
+    [Windows.Controls.Grid]::SetRow($resizeRight, 0)
+    [Windows.Controls.Grid]::SetRowSpan($resizeRight, 2)
+    [Windows.Controls.Grid]::SetColumn($resizeRight, 1)
+    [Windows.Controls.Grid]::SetZIndex($resizeRight, 3000)
+    $grid.Children.Add($resizeRight) | Out-Null
+
+    # Corners
+    $resizeTopLeft = New-Object Windows.Controls.Border
+    $resizeTopLeft.Width = $cornerSize
+    $resizeTopLeft.Height = $cornerSize
+    $resizeTopLeft.Background = [Windows.Media.Brushes]::Transparent
+    $resizeTopLeft.Cursor = [Windows.Input.Cursors]::SizeNWSE
+    $resizeTopLeft.HorizontalAlignment = [Windows.HorizontalAlignment]::Left
+    $resizeTopLeft.VerticalAlignment = [Windows.VerticalAlignment]::Top
+    $resizeTopLeft.Tag = @{ Top = $true; Bottom = $false; Left = $true; Right = $false }
+    [Windows.Controls.Grid]::SetRow($resizeTopLeft, 0)
+    [Windows.Controls.Grid]::SetColumn($resizeTopLeft, 0)
+    [Windows.Controls.Grid]::SetZIndex($resizeTopLeft, 3000)
+    $grid.Children.Add($resizeTopLeft) | Out-Null
+
+    $resizeTopRight = New-Object Windows.Controls.Border
+    $resizeTopRight.Width = $cornerSize
+    $resizeTopRight.Height = $cornerSize
+    $resizeTopRight.Background = [Windows.Media.Brushes]::Transparent
+    $resizeTopRight.Cursor = [Windows.Input.Cursors]::SizeNESW
+    $resizeTopRight.HorizontalAlignment = [Windows.HorizontalAlignment]::Right
+    $resizeTopRight.VerticalAlignment = [Windows.VerticalAlignment]::Top
+    $resizeTopRight.Tag = @{ Top = $true; Bottom = $false; Left = $false; Right = $true }
+    [Windows.Controls.Grid]::SetRow($resizeTopRight, 0)
+    [Windows.Controls.Grid]::SetColumn($resizeTopRight, 1)
+    [Windows.Controls.Grid]::SetZIndex($resizeTopRight, 3000)
+    $grid.Children.Add($resizeTopRight) | Out-Null
+
+    $resizeBottomLeft = New-Object Windows.Controls.Border
+    $resizeBottomLeft.Width = $cornerSize
+    $resizeBottomLeft.Height = $cornerSize
+    $resizeBottomLeft.Background = [Windows.Media.Brushes]::Transparent
+    $resizeBottomLeft.Cursor = [Windows.Input.Cursors]::SizeNESW
+    $resizeBottomLeft.VerticalAlignment = [Windows.VerticalAlignment]::Bottom
+    $resizeBottomLeft.HorizontalAlignment = [Windows.HorizontalAlignment]::Left
+    $resizeBottomLeft.Tag = @{ Top = $false; Bottom = $true; Left = $true; Right = $false }
+    [Windows.Controls.Grid]::SetRow($resizeBottomLeft, 1)
+    [Windows.Controls.Grid]::SetColumn($resizeBottomLeft, 0)
+    [Windows.Controls.Grid]::SetZIndex($resizeBottomLeft, 3000)
+    $grid.Children.Add($resizeBottomLeft) | Out-Null
+
+    $resizeBottomRight = New-Object Windows.Controls.Border
+    $resizeBottomRight.Width = $cornerSize
+    $resizeBottomRight.Height = $cornerSize
+    $resizeBottomRight.Background = [Windows.Media.Brushes]::Transparent
+    $resizeBottomRight.Cursor = [Windows.Input.Cursors]::SizeNWSE
+    $resizeBottomRight.HorizontalAlignment = [Windows.HorizontalAlignment]::Right
+    $resizeBottomRight.VerticalAlignment = [Windows.VerticalAlignment]::Bottom
+    $resizeBottomRight.Tag = @{ Top = $false; Bottom = $true; Left = $false; Right = $true }
+    [Windows.Controls.Grid]::SetRow($resizeBottomRight, 1)
+    [Windows.Controls.Grid]::SetColumn($resizeBottomRight, 1)
+    [Windows.Controls.Grid]::SetZIndex($resizeBottomRight, 3000)
+    $grid.Children.Add($resizeBottomRight) | Out-Null
+
+    $border.Child = $grid
+    $win.Content = $border
+
+    # State
+    $win.Tag = [pscustomobject]@{
+        Dragging = $false
+        DragSource = $null
+        Resize = $false
+        ResizeSource = $null
+        ResizeEdges = @{ Top = $false; Bottom = $false; Left = $false; Right = $false }
+        DragStart = [System.Windows.Point]::new(0,0)
+        ResizeStart = [ordered]@{ W = $Rect.width; H = $Rect.height; Left = $Rect.left; Top = $Rect.top; Mouse = [System.Windows.Point]::new(0,0) }
+        CanvasRect = $CanvasRect
+        RelativeLeft = $Rect.left - $CanvasRect.Left
+        RelativeTop  = $Rect.top - $CanvasRect.Top
+        TitleBar = $titleBar
+        WebViewBorder = $webViewBorder
+        OriginalTitle = $title
+        OriginalUrl = $url
+        PanelName = $name
+        ScriptPath = if ($item.ContainsKey('script')) { $item.script } else { $null }
+    }
+
+    $clampToCanvas = {
+        param($pt, $w, $h, $canvasRect)
+        $clampedX = [Math]::Max($canvasRect.Left, [Math]::Min($canvasRect.Right - $w, $pt.X))
+        $clampedY = [Math]::Max($canvasRect.Top, [Math]::Min($canvasRect.Bottom - $h, $pt.Y))
+        return [System.Windows.Point]::new($clampedX, $clampedY)
+    }.GetNewClosure()
+
+    $panelWindow = $win
+
+    $dragStartHandler = {
+        param($s,$e)
+        if ($e -and $e.ClickCount -gt 1) { return }
+        $state = $panelWindow.Tag
+        $state.Dragging = $true
+        $state.DragSource = $s
+        $state.DragStart = [System.Windows.Point]::new([Windows.Input.Mouse]::GetPosition($null).X, [Windows.Input.Mouse]::GetPosition($null).Y)
+        $state.ResizeStart.Left = $panelWindow.Left
+        $state.ResizeStart.Top = $panelWindow.Top
+        $s.CaptureMouse() | Out-Null
+    }.GetNewClosure()
+
+    $dragMoveHandler = {
+        param($s,$e)
+        $state = $panelWindow.Tag
+        if (-not $state.Dragging -or $state.DragSource -ne $s) { return }
+        $mousePos = [System.Windows.Point]::new([Windows.Input.Mouse]::GetPosition($null).X, [Windows.Input.Mouse]::GetPosition($null).Y)
+        $delta = [System.Windows.Point]::new($mousePos.X - $state.DragStart.X, $mousePos.Y - $state.DragStart.Y)
+        $target = [System.Windows.Point]::new($state.ResizeStart.Left + $delta.X, $state.ResizeStart.Top + $delta.Y)
+        $clamped = & $clampToCanvas $target $panelWindow.Width $panelWindow.Height $state.CanvasRect
+        $panelWindow.Left = $clamped.X
+        $panelWindow.Top = $clamped.Y
+    }.GetNewClosure()
+
+    $dragEndHandler = {
+        param($s,$e)
+        $state = $panelWindow.Tag
+        $state.Dragging = $false
+        if ($state.DragSource) { $state.DragSource.ReleaseMouseCapture() | Out-Null }
+        $state.DragSource = $null
+        # Persist relative offset for owner moves
+        $state.RelativeLeft = $panelWindow.Left - $state.CanvasRect.Left
+        $state.RelativeTop  = $panelWindow.Top - $state.CanvasRect.Top
+    }.GetNewClosure()
+
+    $resizeStartHandler = {
+        param($s,$e)
+        $state = $panelWindow.Tag
+        $state.Resize = $true
+        $state.ResizeSource = $s
+        # Edges from sender tag
+        $edges = $s.Tag
+        $state.ResizeEdges = $edges
+        $state.ResizeStart = [ordered]@{
+            W = $panelWindow.Width
+            H = $panelWindow.Height
+            Left = $panelWindow.Left
+            Top = $panelWindow.Top
+            Mouse = [System.Windows.Point]::new([Windows.Input.Mouse]::GetPosition($null).X, [Windows.Input.Mouse]::GetPosition($null).Y)
+        }
+        $s.CaptureMouse() | Out-Null
+    }.GetNewClosure()
+
+    $resizeMoveHandler = {
+        param($s,$e)
+        $state = $panelWindow.Tag
+        if (-not $state.Resize -or $state.ResizeSource -ne $s) { return }
+        $edges = $state.ResizeEdges
+        $mousePos = [System.Windows.Point]::new([Windows.Input.Mouse]::GetPosition($null).X, [Windows.Input.Mouse]::GetPosition($null).Y)
+        $deltaX = $mousePos.X - $state.ResizeStart.Mouse.X
+        $deltaY = $mousePos.Y - $state.ResizeStart.Mouse.Y
+
+        $newLeft = $state.ResizeStart.Left
+        $newTop = $state.ResizeStart.Top
+        $newW = $state.ResizeStart.W
+        $newH = $state.ResizeStart.H
+
+        if ($edges.Left) {
+            $newLeft = $state.ResizeStart.Left + $deltaX
+            $newW = $state.ResizeStart.W - $deltaX
+        }
+        if ($edges.Right) {
+            $newW = $state.ResizeStart.W + $deltaX
+        }
+        if ($edges.Top) {
+            $newTop = $state.ResizeStart.Top + $deltaY
+            $newH = $state.ResizeStart.H - $deltaY
+        }
+        if ($edges.Bottom) {
+            $newH = $state.ResizeStart.H + $deltaY
+        }
+
+        $minW = 200
+        $minH = 150
+        if ($newW -lt $minW) {
+            if ($edges.Left) { $newLeft -= ($minW - $newW) }
+            $newW = $minW
+        }
+        if ($newH -lt $minH) {
+            if ($edges.Top) { $newTop -= ($minH - $newH) }
+            $newH = $minH
+        }
+
+        # Clamp within canvas
+        $canvas = $state.CanvasRect
+        if ($newLeft -lt $canvas.Left) {
+            $diff = $canvas.Left - $newLeft
+            $newLeft = $canvas.Left
+            if ($edges.Left) { $newW = [Math]::Max($minW, $newW - $diff) }
+        }
+        if ($newTop -lt $canvas.Top) {
+            $diff = $canvas.Top - $newTop
+            $newTop = $canvas.Top
+            if ($edges.Top) { $newH = [Math]::Max($minH, $newH - $diff) }
+        }
+        if ($newLeft + $newW -gt $canvas.Right) {
+            $newW = $canvas.Right - $newLeft
+            if ($newW -lt $minW) { $newW = $minW; $newLeft = $canvas.Right - $newW }
+        }
+        if ($newTop + $newH -gt $canvas.Bottom) {
+            $newH = $canvas.Bottom - $newTop
+            if ($newH -lt $minH) { $newH = $minH; $newTop = $canvas.Bottom - $newH }
+        }
+
+        $panelWindow.Left = $newLeft
+        $panelWindow.Top = $newTop
+        $panelWindow.Width = $newW
+        $panelWindow.Height = $newH
+        $state.TitleBar.Text = "$($state.OriginalTitle) ($([Math]::Round($newW)), $([Math]::Round($newH))) - $($state.OriginalUrl)"
+    }.GetNewClosure()
+
+    $resizeEndHandler = {
+        param($s,$e)
+        $state = $panelWindow.Tag
+        $state.Resize = $false
+        if ($state.ResizeSource) { $state.ResizeSource.ReleaseMouseCapture() | Out-Null }
+        $state.ResizeSource = $null
+        # Persist relative offset for owner moves
+        $state.RelativeLeft = $panelWindow.Left - $state.CanvasRect.Left
+        $state.RelativeTop  = $panelWindow.Top - $state.CanvasRect.Top
+    }.GetNewClosure()
+
+    # Hook drag to handle and title
+    # Make the entire title surface draggable
+    $titleContainer.Add_MouseLeftButtonDown($dragStartHandler)
+    $titleContainer.Add_MouseMove($dragMoveHandler)
+    $titleContainer.Add_MouseLeftButtonUp($dragEndHandler)
+    $titleBar.Add_MouseLeftButtonDown($dragStartHandler)
+    $titleBar.Add_MouseMove($dragMoveHandler)
+    $titleBar.Add_MouseLeftButtonUp($dragEndHandler)
+
+    $copyUrlHandlerWin = {
+        param($sender, $e)
+        if (-not $e -or $e.ClickCount -ne 2) { return }
+        try {
+            $state = $panelWindow.Tag
+            $urlToCopy = if ($state -and $state.PSObject.Properties['OriginalUrl']) { $state.OriginalUrl } else { $title }
+            if ([string]::IsNullOrWhiteSpace($urlToCopy)) { return }
+            [System.Windows.Clipboard]::SetText($urlToCopy)
+            Write-Host "✓ Copied URL from window title: $urlToCopy" -ForegroundColor Cyan
+            $e.Handled = $true
+        }
+        catch { }
+    }.GetNewClosure()
+    $titleBar.Add_MouseLeftButtonDown($copyUrlHandlerWin)
+
+    # Hook resize to all edges/corners
+    $resizeHandles = @(
+        $resizeTop, $resizeBottom, $resizeLeft, $resizeRight,
+        $resizeTopLeft, $resizeTopRight, $resizeBottomLeft, $resizeBottomRight
+    )
+    foreach ($h in $resizeHandles) {
+        $h.Add_MouseLeftButtonDown($resizeStartHandler)
+        $h.Add_MouseMove($resizeMoveHandler)
+        $h.Add_MouseLeftButtonUp($resizeEndHandler)
+    }
+
+    # Create WebView2 and store for later init
+    try {
+        if (-not $script:webView2Available) { throw "WebView2 runtime not available" }
+        $webView = New-Object Microsoft.Web.WebView2.Wpf.WebView2
+        $webView.HorizontalAlignment = [Windows.HorizontalAlignment]::Stretch
+        $webView.VerticalAlignment = [Windows.VerticalAlignment]::Stretch
+        $webViewBorder.Child = $webView
+        $script:webViewsToInitialize += @{
+            WebView = $webView
+            Url = $url
+            Name = $name
+            ScriptPath = if ($item.ContainsKey('script')) { $item.script } else { $null }
+            TitleBar = $titleBar
+            SizeSource = $panelWindow
+        }
+        Write-Host "✓ Created WebView2 panel window for $name : $url" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "⚠ Failed to create WebView2 for $name : $_" -ForegroundColor Yellow
+    }
+
+    $win.Show()
+    return $win
+}
+
 # Recursive function to create panels or groups
 function Create-PanelOrGroup {
     param(
@@ -843,6 +1445,7 @@ function Create-PanelOrGroup {
                 throw "WebView2 runtime not available"
             }
             
+            $nameForStore = if ([string]::IsNullOrWhiteSpace($Item.name)) { 'panel' } else { $Item.name }
             $webView = New-Object Microsoft.Web.WebView2.Wpf.WebView2
             $webView.HorizontalAlignment = [Windows.HorizontalAlignment]::Stretch
             $webView.VerticalAlignment = [Windows.VerticalAlignment]::Stretch
@@ -854,12 +1457,13 @@ function Create-PanelOrGroup {
             
             # Store for later initialization
             $scriptPath = if ($Item.ContainsKey('script')) { $Item.script } else { $null }
-            $nameForStore = if ([string]::IsNullOrWhiteSpace($Item.name)) { 'panel' } else { $Item.name }
             $script:webViewsToInitialize += @{
                 WebView = $webView
                 Url = $Item.url
                 Name = $nameForStore
                 ScriptPath = $scriptPath
+                TitleBar = $panelControl.TitleBar
+                SizeSource = $panelControl
             }
             
             Write-Host "✓ Created WebView2 panel for $($Item.name): $($Item.url)" -ForegroundColor Green
@@ -884,34 +1488,19 @@ function Create-PanelOrGroup {
     }
 }
 
-# Create panels from config
 $script:webViewsToInitialize = @()
-$script:allPanels = @()
-
-# The config.panels contains one wrapper object with the top-level layout item
-if ($config.panels.Count -gt 0 -and $config.panels[0].panels.Count -gt 0) {
-    $topLevelItem = $config.panels[0].panels[0]
-    # Create the top-level control which will be the entire canvas
-    $control = Create-PanelOrGroup -Item $topLevelItem -Left 0 -Top 0 -Width 1185 -Height 763 -GridRow 0 -GridCol 0
-    if ($control) {
-        $script:panelCanvas.Children.Add($control) | Out-Null
-    }
-}
-
-Write-Host "✓ Created $($script:allPanels.Count) panels" -ForegroundColor Green
-Write-Host "✓ Queued $($script:webViewsToInitialize.Count) WebView2 controls for initialization" -ForegroundColor Green
+$script:panelWindows = @()
+$script:ownerEventsHooked = $false
 
 # Initialize WebView2 controls after window is loaded
 $window.Add_ContentRendered({
-    # Set the top-level control to fill the canvas
-    if ($script:panelCanvas.Children.Count -gt 0) {
-        $topControl = $script:panelCanvas.Children[0]
-        $topControl.Width = $script:panelCanvas.ActualWidth
-        $topControl.Height = $script:panelCanvas.ActualHeight
-        [Windows.Controls.Canvas]::SetLeft($topControl, 0)
-        [Windows.Controls.Canvas]::SetTop($topControl, 0)
-        
-        Write-Host "Canvas dimensions: $($script:panelCanvas.ActualWidth) x $($script:panelCanvas.ActualHeight)" -ForegroundColor Yellow
+    Write-Host "Canvas dimensions: $($script:panelCanvas.ActualWidth) x $($script:panelCanvas.ActualHeight)" -ForegroundColor Yellow
+
+    Build-PanelWindows -OwnerWindow $window
+    if (-not $script:ownerEventsHooked) {
+        $window.Add_LocationChanged({ Update-PanelWindowPositions -OwnerWindow $window })
+        $window.Add_StateChanged({ Update-PanelWindowPositions -OwnerWindow $window })
+        $script:ownerEventsHooked = $true
     }
     
     # Create shared user data folder for WebView2 in project root
@@ -921,159 +1510,177 @@ $window.Add_ContentRendered({
         Write-Host "✓ Created WebView2 data folder: $userDataFolder" -ForegroundColor Green
     }
     
-    # Handle window resize - resize top-level control to fill canvas
-    $script:panelCanvas.Add_SizeChanged({
-        try {
-            if ($script:panelCanvas.Children.Count -gt 0) {
-                $topControl = $script:panelCanvas.Children[0]
-                $newWidth = $script:panelCanvas.ActualWidth
-                $newHeight = $script:panelCanvas.ActualHeight
-                
-                if ($newWidth -gt 0 -and $newHeight -gt 0) {
-                    $topControl.Width = $newWidth
-                    $topControl.Height = $newHeight
-                }
-            }
-        }
-        catch {
-            Write-Host "Error in SizeChanged: $_" -ForegroundColor Red
-        }
-    })
-    
-    # Capture variables for async closures
-    $webViewList = $script:webViewsToInitialize
-    $scriptDir = $ScriptDirectory
-    
-    # Initialize WebView2 environment asynchronously without blocking
-    Write-Host "Creating WebView2 environment..." -ForegroundColor Cyan
-    
-    $envTask = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $userDataFolder, $null)
-    
-    # Set up async completion handler - this will run when environment is ready
-    $envTask.GetAwaiter().OnCompleted({
-        try {
-            $sharedEnv = $envTask.GetAwaiter().GetResult()
-            Write-Host "✓ WebView2 environment ready" -ForegroundColor Green
-            
-            # Initialize each WebView2 control
-            foreach ($item in $webViewList) {
-                $webView = $item['WebView']
-                $url = $item['Url']
-                $name = $item['Name']
-                $scriptPath = $item['ScriptPath']
-                
-                # Read script content now if configured
-                $scriptContent = $null
-                if ($scriptPath) {
-                    $fullScriptPath = Join-Path $scriptDir $scriptPath
-                    if (Test-Path $fullScriptPath) {
-                        $scriptContent = Get-Content $fullScriptPath -Raw
-                        Write-Host "✓ Loaded script for $name : $scriptPath ($($scriptContent.Length) chars)" -ForegroundColor Cyan
-                    } else {
-                        Write-Host "⚠ Script file not found for $name : $fullScriptPath" -ForegroundColor Yellow
-                    }
-                }
-                
-                try {
-                    # Use shared environment
-                    $initTask = $webView.EnsureCoreWebView2Async($sharedEnv)
-                    
-                    # Create closure variables
-                    $localWebView = $webView
-                    $localUrl = $url
-                    $localName = if ([string]::IsNullOrWhiteSpace($name)) { 'panel' } else { $name }
-                    $localScript = $scriptContent
-                    $localInjectLog = "✓ Injected script for $localName"
-                    
-                    # Set up completion handler
-                    $initTask.GetAwaiter().OnCompleted({
-                        try {
-                            # If a script is loaded, set up event handler
-                            if ($localScript) {
-                                $localWebView.add_NavigationCompleted({
-                                    param($sender, $args)
-                                    try {
-                                        # Log on the UI thread so it actually prints to host
-                                        Write-Host $localInjectLog -ForegroundColor Magenta
-                                        $sender.CoreWebView2.ExecuteScriptAsync($localScript) | Out-Null
-                                    }
-                                    catch {
-                                        Write-Host "⚠ Failed to inject script for $localName : $_" -ForegroundColor Yellow
-                                    }
-                                })
-                            }
-                            
-                            # Navigate to URL
-                            $localWebView.Source = [System.Uri]::new($localUrl)
-                            Write-Host "✓ Navigated $localName to $localUrl" -ForegroundColor Cyan
-                        }
-                        catch {
-                            Write-Host "⚠ Failed to navigate $localName : $_" -ForegroundColor Yellow
-                        }
-                    }.GetNewClosure())
-                }
-                catch {
-                    Write-Host "⚠ Failed to initialize WebView2 for $name : $_" -ForegroundColor Yellow
-                }
-            }
-        }
-        catch {
-            Write-Host "⚠ Failed to create WebView2 environment: $_" -ForegroundColor Yellow
-        }
-    }.GetNewClosure())
-})
+    function Initialize-WebViews {
+        # Capture variables for async closures
+        $webViewList = $script:webViewsToInitialize
+        $scriptDir = $ScriptDirectory
 
-# Handle window resizing
-$window.Add_SizeChanged({
-    $canvasWidth = $script:panelCanvas.ActualWidth
-    $canvasHeight = $script:panelCanvas.ActualHeight
-    
-    if ($canvasWidth -gt 0 -and $canvasHeight -gt 0) {
-        # Calculate dimensions based on rows
-        $numRows = $script:rows.Count
-        $panelH = $canvasHeight / $numRows
-        
-        # Process each row to calculate positions and handle custom widths
-        foreach ($rowInfo in $script:rows) {
-            $rowControls = $rowInfo.controls
-            $leftOffset = 0
-            
-            foreach ($control in $rowControls) {
-                # Use configured width or calculate proportional width
-                if ($control.ConfigWidth -ne $null) {
-                    $panelW = $control.ConfigWidth
-                } else {
-                    # Calculate remaining width for controls without explicit width
-                    $totalConfiguredWidth = ($rowControls | Where-Object { $_.ConfigWidth -ne $null } | ForEach-Object { $_.ConfigWidth } | Measure-Object -Sum).Sum
-                    $controlsWithoutWidth = ($rowControls | Where-Object { $_.ConfigWidth -eq $null }).Count
-                    if ($controlsWithoutWidth -gt 0) {
-                        $panelW = ($canvasWidth - $totalConfiguredWidth) / $controlsWithoutWidth
-                    } else {
-                        $panelW = $canvasWidth / $rowControls.Count
+        # Initialize WebView2 environment asynchronously without blocking
+        Write-Host "Creating WebView2 environment..." -ForegroundColor Cyan
+        $envTask = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $userDataFolder, $null)
+
+        # Set up async completion handler - this will run when environment is ready
+        $envTask.GetAwaiter().OnCompleted({
+            try {
+                $sharedEnv = $envTask.GetAwaiter().GetResult()
+                Write-Host "✓ WebView2 environment ready" -ForegroundColor Green
+
+                # Initialize each WebView2 control
+                foreach ($item in $webViewList) {
+                    $webView = $item['WebView']
+                    $url = $item['Url']
+                    $name = $item['Name']
+                    $scriptPath = $item['ScriptPath']
+                    $titleBar = if ($item.ContainsKey('TitleBar')) { $item['TitleBar'] } else { $null }
+                    $sizeSource = if ($item.ContainsKey('SizeSource')) { $item['SizeSource'] } else { $null }
+
+                    $originalTitle = $name
+                    if ($titleBar -and $titleBar.PSObject.Properties['OriginalTitle']) {
+                        $originalTitle = $titleBar.OriginalTitle
+                    }
+                    elseif ($sizeSource -and $sizeSource.Tag -and $sizeSource.Tag.PSObject.Properties['OriginalTitle']) {
+                        $originalTitle = $sizeSource.Tag.OriginalTitle
+                    }
+
+                    $originalUrl = $url
+                    if ($titleBar -and $titleBar.PSObject.Properties['OriginalUrl']) {
+                        $originalUrl = $titleBar.OriginalUrl
+                    }
+                    elseif ($sizeSource -and $sizeSource.Tag -and $sizeSource.Tag.PSObject.Properties['OriginalUrl']) {
+                        $originalUrl = $sizeSource.Tag.OriginalUrl
+                    }
+
+                    # Read script content now if configured
+                    $scriptContent = $null
+                    if ($scriptPath) {
+                        $fullScriptPath = Join-Path $scriptDir $scriptPath
+                        if (Test-Path $fullScriptPath) {
+                            $scriptContent = Get-Content $fullScriptPath -Raw
+                            Write-Host "✓ Loaded script for $name : $scriptPath ($($scriptContent.Length) chars)" -ForegroundColor Cyan
+                        } else {
+                            Write-Host "⚠ Script file not found for $name : $fullScriptPath" -ForegroundColor Yellow
+                        }
+                    }
+
+                    try {
+                        # Use shared environment
+                        $initTask = $webView.EnsureCoreWebView2Async($sharedEnv)
+
+                        # Create closure variables
+                        $localWebView = $webView
+                        $localUrl = $url
+                        $localName = if ([string]::IsNullOrWhiteSpace($name)) { 'panel' } else { $name }
+                        $localScript = $scriptContent
+                        $localInjectLog = "✓ Injected script for $localName"
+                        $localTitleBar = $titleBar
+                        $localSizeSource = $sizeSource
+                        $localOriginalTitle = $originalTitle
+                        $localOriginalUrl = $originalUrl
+
+                        $updateTitle = {
+                            param($newUrl)
+                            try {
+                                $displayUrl = if ([string]::IsNullOrWhiteSpace($newUrl)) { $localOriginalUrl } else { $newUrl }
+
+                                $widthVal = $null
+                                $heightVal = $null
+                                if ($localSizeSource) {
+                                    $widthVal = $localSizeSource.Width
+                                    $heightVal = $localSizeSource.Height
+                                    if ([double]::IsNaN($widthVal)) { $widthVal = $localSizeSource.ActualWidth }
+                                    if ([double]::IsNaN($heightVal)) { $heightVal = $localSizeSource.ActualHeight }
+                                }
+
+                                $widthDisplay = if ($widthVal -ne $null) { [Math]::Round($widthVal) } else { 0 }
+                                $heightDisplay = if ($heightVal -ne $null) { [Math]::Round($heightVal) } else { 0 }
+
+                                if ($localTitleBar) {
+                                    $localTitleBar.Text = "$localOriginalTitle ($widthDisplay, $heightDisplay) - $displayUrl"
+                                    if ($localTitleBar.PSObject.Properties['OriginalUrl']) {
+                                        $localTitleBar.OriginalUrl = $displayUrl
+                                    }
+                                }
+
+                                if ($localSizeSource -and $localSizeSource.Tag -and $localSizeSource.Tag.PSObject.Properties['OriginalUrl']) {
+                                    $localSizeSource.Tag.OriginalUrl = $displayUrl
+                                }
+                            }
+                            catch { }
+                        }.GetNewClosure()
+
+                        # Set up completion handler
+                        $initTask.GetAwaiter().OnCompleted({
+                            try {
+                                # If a script is loaded, set up event handler
+                                if ($localScript) {
+                                    $localWebView.add_NavigationCompleted({
+                                        param($sender, $args)
+                                        try {
+                                            # Log on the UI thread so it actually prints to host
+                                            Write-Host $localInjectLog -ForegroundColor Magenta
+                                            $sender.CoreWebView2.ExecuteScriptAsync($localScript) | Out-Null
+                                        }
+                                        catch {
+                                            Write-Host "⚠ Failed to inject script for $localName : $_" -ForegroundColor Yellow
+                                        }
+                                    })
+                                }
+
+                                try {
+                                    if ($localWebView.CoreWebView2) {
+                                        $localWebView.CoreWebView2.add_NavigationStarting({
+                                            param($sender, $args)
+                                            try {
+                                                $currentUrl = if ($args -and $args.Uri) { $args.Uri } else { $sender.Source }
+                                                & $updateTitle $currentUrl
+                                            }
+                                            catch { }
+                                        })
+
+                                        $localWebView.CoreWebView2.add_NavigationCompleted({
+                                            param($sender, $args)
+                                            try {
+                                                $currentUrl = if ($args -and $args.Uri) { $args.Uri } else { $sender.Source }
+                                                & $updateTitle $currentUrl
+                                            }
+                                            catch { }
+                                        })
+
+                                        $localWebView.CoreWebView2.add_SourceChanged({
+                                            param($sender, $args)
+                                            try {
+                                                $currentUrl = $sender.Source
+                                                & $updateTitle $currentUrl
+                                            }
+                                            catch { }
+                                        })
+                                    }
+                                }
+                                catch { }
+
+                                & $updateTitle $localUrl
+
+                                # Navigate to URL
+                                $localWebView.Source = [System.Uri]::new($localUrl)
+                                Write-Host "✓ Navigated $localName to $localUrl" -ForegroundColor Cyan
+                            }
+                            catch {
+                                Write-Host "⚠ Failed to navigate $localName : $_" -ForegroundColor Yellow
+                            }
+                        }.GetNewClosure())
+                    }
+                    catch {
+                        Write-Host "⚠ Failed to initialize WebView2 for $name : $_" -ForegroundColor Yellow
                     }
                 }
-                
-                $control.Width = $panelW
-                $control.Height = $panelH
-                if ($control.InnerBorder) {
-                    $control.InnerBorder.Width = $panelW
-                    $control.InnerBorder.Height = $panelH
-                }
-                
-                [Windows.Controls.Canvas]::SetLeft($control, $leftOffset)
-                [Windows.Controls.Canvas]::SetTop($control, $control.GridRow * $panelH)
-                
-                # Update title bar with new dimensions (only for panels, not groups)
-                if ($control.TitleBar) {
-                    $control.TitleBar.Text = "$($control.TitleBar.OriginalTitle) ($([Math]::Round($panelW)), $([Math]::Round($panelH))) - $($control.TitleBar.OriginalUrl)"
-                }
-                
-                Write-Host "Control $($control.PanelName): Position ($leftOffset, $topPos), Size ($panelW x $panelH)" -ForegroundColor Gray
-                
-                $leftOffset += $panelW
             }
-        }
+            catch {
+                Write-Host "⚠ Failed to create WebView2 environment: $_" -ForegroundColor Yellow
+            }
+        }.GetNewClosure())
     }
+
+    Initialize-WebViews -UserDataFolder $userDataFolder -ScriptDirectory $ScriptDirectory
 })
 
 # Event Handlers
