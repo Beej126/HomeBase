@@ -75,35 +75,43 @@ if (-not (Test-Path $yamlPath)) {
     exit 1
 }
 
-# Simple YAML parser for nested group definitions
+# Simple YAML parser for nested panel row definitions
 function Parse-Yaml {
     param([string]$FilePath)
     
-    $config = @{ groups = @() }
+    $config = @{ panels = @() }
     $content = Get-Content $FilePath -Raw
     
-    # Parse groups - simplified to just look for "- panels:" markers
-    $groupPattern = '- panels:'
-    $groupMatches = [regex]::Matches($content, $groupPattern)
+    # Look for top-level "panels:" keyword first
+    if ($content -notmatch 'panels:') {
+        Write-Host "⚠ No 'panels:' section found in config" -ForegroundColor Yellow
+        return $config
+    }
     
-    $groupIndex = 0
-    foreach ($groupMatch in $groupMatches) {
-        $groupStartIndex = $groupMatch.Index + $groupMatch.Length
+    # Parse row groups - look for "  - panels:" (2 space indent under top-level panels:)
+    $rowPattern = '^\s{2}- panels:'
+    $rowMatches = [regex]::Matches($content, $rowPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+    
+    Write-Host "DEBUG: Found $($rowMatches.Count) row(s)" -ForegroundColor Gray
+    
+    $rowIndex = 0
+    foreach ($rowMatch in $rowMatches) {
+        $rowStartIndex = $rowMatch.Index + $rowMatch.Length
         
-        # Find the next group or end of file
-        $nextGroupIndex = $content.Length
-        $nextMatch = [regex]::Match($content.Substring($groupStartIndex), '^\s*- panels:', [System.Text.RegularExpressions.RegexOptions]::Multiline)
+        # Find the next row or end of file
+        $nextRowIndex = $content.Length
+        $nextMatch = [regex]::Match($content.Substring($rowStartIndex), $rowPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
         if ($nextMatch.Success) {
-            $nextGroupIndex = $groupStartIndex + $nextMatch.Index
+            $nextRowIndex = $rowStartIndex + $nextMatch.Index
         }
         
-        $groupContent = $content.Substring($groupStartIndex, $nextGroupIndex - $groupStartIndex)
+        $rowContent = $content.Substring($rowStartIndex, $nextRowIndex - $rowStartIndex)
         
-        Write-Host "DEBUG: Group content length: $($groupContent.Length)" -ForegroundColor Gray
-        Write-Host "DEBUG: Group content preview: $($groupContent.Substring(0, [Math]::Min(200, $groupContent.Length)))" -ForegroundColor Gray
+        Write-Host "DEBUG: Row $rowIndex content length: $($rowContent.Length)" -ForegroundColor Gray
+        Write-Host "DEBUG: Row $rowIndex preview: $($rowContent.Substring(0, [Math]::Min(200, $rowContent.Length)))" -ForegroundColor Gray
         
         # Parse panels by splitting on panel list items
-        $panelLines = $groupContent -split "`n" | Where-Object { $_.Trim() -ne '' }
+        $panelLines = $rowContent -split "`n" | Where-Object { $_.Trim() -ne '' }
         $panels = @()
         $currentPanel = $null
         
@@ -133,13 +141,13 @@ function Parse-Yaml {
             $panels += $currentPanel
         }
         
-        Write-Host "DEBUG: Parsed $($panels.Count) panels" -ForegroundColor Gray
+        Write-Host "DEBUG: Parsed $($panels.Count) panel(s) in row $rowIndex" -ForegroundColor Gray
         
-        $group = @{
+        $row = @{
             panels = $panels
         }
-        $config.groups += $group
-        $groupIndex++
+        $config.panels += $row
+        $rowIndex++
     }
     
     return $config
@@ -522,42 +530,48 @@ function New-DraggablePanel {
     return $panelWrapper
 }
 
-# Create panels from config groups
+# Create panels from config
 $script:webViewsToInitialize = @()
 $script:allPanels = @()
-$script:groups = @()
+$script:rows = @()
 
 # Initial size - will be updated after window loads
 $panelWidth = 600
 $panelHeight = 387
 
-$groupRow = 0
-foreach ($group in $config.groups) {
-    $groupInfo = @{
-        row = $groupRow
+$rowIndex = 0
+foreach ($row in $config.panels) {
+    # Each row should have a 'panels' property with array of panels
+    if (-not $row.ContainsKey('panels')) {
+        Write-Host "⚠ Row $rowIndex missing 'panels' property, skipping" -ForegroundColor Yellow
+        continue
+    }
+    
+    $rowInfo = @{
+        index = $rowIndex
         panels = @()
     }
     
     $col = 0
-    $groupLeftOffset = 0
-    foreach ($panel in $group.panels) {
+    $rowLeftOffset = 0
+    foreach ($panel in $row.panels) {
         # Use specified width or default
         $thisWidth = if ($panel.ContainsKey('width')) { $panel.width } else { $panelWidth }
         
-        $top = $groupRow * $panelHeight
-        $left = $groupLeftOffset
+        $top = $rowIndex * $panelHeight
+        $left = $rowLeftOffset
         
         $panelControl = New-DraggablePanel -Name $panel.name -Title $panel.title -Url $panel.url -Left $left -Top $top -Width $thisWidth -Height $panelHeight
         
         # Store panel with grid position and custom width for later resizing
-        $panelControl | Add-Member -NotePropertyName GridRow -NotePropertyValue $groupRow -Force
+        $panelControl | Add-Member -NotePropertyName GridRow -NotePropertyValue $rowIndex -Force
         $panelControl | Add-Member -NotePropertyName GridColumn -NotePropertyValue $col -Force
         $panelControl | Add-Member -NotePropertyName ConfigWidth -NotePropertyValue $(if ($panel.ContainsKey('width')) { $panel.width } else { $null }) -Force
         $panelControl | Add-Member -NotePropertyName ScriptPath -NotePropertyValue $(if ($panel.ContainsKey('script')) { $panel.script } else { $null }) -Force
         $script:allPanels += $panelControl
-        $groupInfo.panels += $panelControl
+        $rowInfo.panels += $panelControl
         
-        $groupLeftOffset += $thisWidth
+        $rowLeftOffset += $thisWidth
         $col += 1
         
         # Create and add WebView2 control
@@ -598,15 +612,14 @@ foreach ($group in $config.groups) {
         }
         
         $script:panelCanvas.Children.Add($panelControl) | Out-Null
-        $col += 1
     }
     
-    $groupInfo | Add-Member -NotePropertyName ColumnCount -NotePropertyValue $col -Force
-    $script:groups += $groupInfo
-    $groupRow += 1
+    $rowInfo | Add-Member -NotePropertyName ColumnCount -NotePropertyValue $col -Force
+    $script:rows += $rowInfo
+    $rowIndex += 1
 }
 
-Write-Host "✓ Created $($script:allPanels.Count) panels in $($script:groups.Count) groups" -ForegroundColor Green
+Write-Host "✓ Created $($script:allPanels.Count) panels in $($script:rows.Count) rows" -ForegroundColor Green
 Write-Host "✓ Queued $($script:webViewsToInitialize.Count) WebView2 controls for initialization" -ForegroundColor Green
 
 # Initialize WebView2 controls after window is loaded
@@ -617,29 +630,29 @@ $window.Add_ContentRendered({
     
     Write-Host "Canvas dimensions: $canvasWidth x $canvasHeight" -ForegroundColor Yellow
     
-    # Calculate dimensions based on groups
-    $numGroups = $script:groups.Count
-    $panelH = $canvasHeight / $numGroups
+    # Calculate dimensions based on rows
+    $numRows = $script:rows.Count
+    $panelH = $canvasHeight / $numRows
     
-    Write-Host "Panel height: $panelH (Groups: $numGroups)" -ForegroundColor Yellow
+    Write-Host "Panel height: $panelH (Rows: $numRows)" -ForegroundColor Yellow
     
-    # Process each group to calculate positions and handle custom widths
-    foreach ($groupInfo in $script:groups) {
-        $groupPanels = $groupInfo.panels
+    # Process each row to calculate positions and handle custom widths
+    foreach ($rowInfo in $script:rows) {
+        $rowPanels = $rowInfo.panels
         $leftOffset = 0
         
-        foreach ($panel in $groupPanels) {
+        foreach ($panel in $rowPanels) {
             # Use configured width or calculate proportional width
             if ($panel.ConfigWidth -ne $null) {
                 $panelW = $panel.ConfigWidth
             } else {
                 # Calculate remaining width for panels without explicit width
-                $totalConfiguredWidth = ($groupPanels | Where-Object { $_.ConfigWidth -ne $null } | ForEach-Object { $_.ConfigWidth } | Measure-Object -Sum).Sum
-                $panelsWithoutWidth = ($groupPanels | Where-Object { $_.ConfigWidth -eq $null }).Count
+                $totalConfiguredWidth = ($rowPanels | Where-Object { $_.ConfigWidth -ne $null } | ForEach-Object { $_.ConfigWidth } | Measure-Object -Sum).Sum
+                $panelsWithoutWidth = ($rowPanels | Where-Object { $_.ConfigWidth -eq $null }).Count
                 if ($panelsWithoutWidth -gt 0) {
                     $panelW = ($canvasWidth - $totalConfiguredWidth) / $panelsWithoutWidth
                 } else {
-                    $panelW = $canvasWidth / $groupPanels.Count
+                    $panelW = $canvasWidth / $rowPanels.Count
                 }
             }
             
@@ -763,27 +776,27 @@ $window.Add_SizeChanged({
     $canvasHeight = $script:panelCanvas.ActualHeight
     
     if ($canvasWidth -gt 0 -and $canvasHeight -gt 0) {
-        # Calculate dimensions based on groups
-        $numGroups = $script:groups.Count
-        $panelH = $canvasHeight / $numGroups
+        # Calculate dimensions based on rows
+        $numRows = $script:rows.Count
+        $panelH = $canvasHeight / $numRows
         
-        # Process each group to calculate positions and handle custom widths
-        foreach ($groupInfo in $script:groups) {
-            $groupPanels = $groupInfo.panels
+        # Process each row to calculate positions and handle custom widths
+        foreach ($rowInfo in $script:rows) {
+            $rowPanels = $rowInfo.panels
             $leftOffset = 0
             
-            foreach ($panel in $groupPanels) {
+            foreach ($panel in $rowPanels) {
                 # Use configured width or calculate proportional width
                 if ($panel.ConfigWidth -ne $null) {
                     $panelW = $panel.ConfigWidth
                 } else {
                     # Calculate remaining width for panels without explicit width
-                    $totalConfiguredWidth = ($groupPanels | Where-Object { $_.ConfigWidth -ne $null } | ForEach-Object { $_.ConfigWidth } | Measure-Object -Sum).Sum
-                    $panelsWithoutWidth = ($groupPanels | Where-Object { $_.ConfigWidth -eq $null }).Count
+                    $totalConfiguredWidth = ($rowPanels | Where-Object { $_.ConfigWidth -ne $null } | ForEach-Object { $_.ConfigWidth } | Measure-Object -Sum).Sum
+                    $panelsWithoutWidth = ($rowPanels | Where-Object { $_.ConfigWidth -eq $null }).Count
                     if ($panelsWithoutWidth -gt 0) {
                         $panelW = ($canvasWidth - $totalConfiguredWidth) / $panelsWithoutWidth
                     } else {
-                        $panelW = $canvasWidth / $groupPanels.Count
+                        $panelW = $canvasWidth / $rowPanels.Count
                     }
                 }
                 

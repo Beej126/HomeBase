@@ -1,4 +1,4 @@
-groups:
+panels:
   - panels:
       - name: calendar
         title: Google Calendar
@@ -19,4 +19,5 @@ groups:
         url: https://tasks.google.com
         width: 300
         script: scripts/google-tasks.js
+
 
