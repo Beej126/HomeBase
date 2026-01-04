@@ -21,7 +21,7 @@ function tryClickMenu(attempts = 0) {
 }
 
 // Start trying after a short delay
-setTimeout(() => {
+const intervalHandle = setInterval(() => {
     console.log('Starting menu click attempts...');
-    tryClickMenu();
-}, 1000);
+    if (tryClickMenu()) clearInterval(intervalHandle);
+}, 100);
