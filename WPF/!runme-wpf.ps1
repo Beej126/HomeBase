@@ -2,7 +2,7 @@
 # Restarts MissionControl.ps1 whenever either file changes
 
 param(
-    [string]$TargetScript = "MissionControl.ps1",
+    [string]$TargetScript = "MissionControl-WPF.ps1",
     [string]$ConfigFile = "config.yml"
 )
 

@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <MetadataUpdateSupport>false</MetadataUpdateSupport>
+    <!-- Suppress MSB3277: WebView2 package pulls in WPF assembly with conflicting WindowsBase versions (4.0 vs 5.0).
+         This is harmless; net10.0 version is used. Suppressing to keep build output clean.
+
+         Suppress NETSDK1234 and NETSDK1235: Hot-reload metadata handler signature mismatches in WinForms/.NET 10.
+         This is a known compatibility issue in .NET 10 where the WinForms metadata update handler wasn't fully aligned 
+         with the hot-reload infrastructure's expectations. 
+         It's essentially a version mismatch between WinForms and the runtime's hot-reload system.
+    -->
+    <NoWarn>$(NoWarn);MSB3277;NETSDK1234;NETSDK1235</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3650.58" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Watch Include="..\config.yml" />
+  </ItemGroup>
+
+</Project>

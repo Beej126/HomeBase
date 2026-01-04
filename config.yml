@@ -1,23 +1,27 @@
-- vgroup:
+width: 2560
+height: 1440
 
-  - hgroup:
-    - title: Google Calendar
-      url: https://calendar.google.com
+layout:
+  - vgroup:
 
-    - title: Google Photos
-      url: https://photos.google.com
+    - hgroup:
+      - title: Google Calendar
+        url: https://calendar.google.com
 
-  - hgroup:
+      - title: Google Photos
+        url: https://photos.google.com
 
-    - title: Our Groceries
-      url: https://www.ourgroceries.com/your-lists/list/MQ0VcOZaQr8UyWjeVQABSk
-      width: 200
+    - hgroup:
 
-    - title: Google Tasks
-      url: https://tasks.google.com
-      width: 300
-      script: scripts/google-tasks.js
+      - title: Our Groceries
+        url: https://www.ourgroceries.com/your-lists/list/MQ0VcOZaQr8UyWjeVQABSk
+        width: 200
 
-    - title: Google Tasks
-      url: https://google.com
-      width: 300
+      - title: Google Tasks
+        url: https://tasks.google.com
+        width: 300
+        script: scripts/google-tasks.js
+
+      - title: Google Home
+        url: https://google.com
+        width: 300

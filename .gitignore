@@ -1,2 +1,3 @@
-.webview2/
-WebView2Data/
+.WebView2Data/
+obj/
+bin/

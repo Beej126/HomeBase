@@ -1,0 +1,23 @@
+- vgroup:
+
+  - hgroup:
+    - title: Google Calendar
+      url: https://calendar.google.com
+
+    - title: Google Photos
+      url: https://photos.google.com
+
+  - hgroup:
+
+    - title: Our Groceries
+      url: https://www.ourgroceries.com/your-lists/list/MQ0VcOZaQr8UyWjeVQABSk
+      width: 200
+
+    - title: Google Tasks
+      url: https://tasks.google.com
+      width: 300
+      script: scripts/google-tasks.js
+
+    - title: Google Tasks
+      url: https://google.com
+      width: 300
