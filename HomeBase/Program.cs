@@ -2,6 +2,7 @@ using System.Collections;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -30,6 +31,7 @@ internal static class Program
     [DllImport("user32.dll")]
     private static extern bool GetScrollInfo(IntPtr hwnd, int nBar, ref SCROLLINFO lpsi);
 
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(5) };
     private static CoreWebView2Environment? sharedWebView2Environment;
     private static Icon? appIcon;
     private static Image? appLogoImage;
@@ -401,6 +403,56 @@ internal static class Program
         }
     }
 
+    private static async Task<Icon?> TryFetchFaviconAsync(string? pageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(pageUrl)) { return null; }
+        if (!Uri.TryCreate(pageUrl, UriKind.Absolute, out var uri)) { return null; }
+
+        var candidates = new List<Uri>();
+        try
+        {
+            candidates.Add(new Uri(uri.GetLeftPart(UriPartial.Authority).TrimEnd('/') + "/favicon.ico"));
+        }
+        catch { }
+
+        try
+        {
+            candidates.Add(new Uri($"https://www.google.com/s2/favicons?domain={uri.Host}&sz=64"));
+        }
+        catch { }
+
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                using var response = await Http.GetAsync(candidate);
+                if (!response.IsSuccessStatusCode) { continue; }
+
+                await using var ms = new MemoryStream();
+                await response.Content.CopyToAsync(ms);
+                ms.Position = 0;
+
+                try
+                {
+                    return new Icon(ms);
+                }
+                catch
+                {
+                    ms.Position = 0;
+                    using var bmp = new Bitmap(ms);
+                    var handle = bmp.GetHicon();
+                    return Icon.FromHandle(handle);
+                }
+            }
+            catch
+            {
+                // ignore and try next candidate
+            }
+        }
+
+        return null;
+    }
+
     private static async Task InitializeWebView2Environment(string scriptDirectory)
     {
         if (sharedWebView2Environment != null) { return; }
@@ -542,11 +594,6 @@ internal static class Program
             Top = (int)Math.Round(rect.Top)
         };
 
-        if (appIcon != null)
-        {
-            childForm.Icon = appIcon;
-        }
-
         // Set outer size from layout (rect carries outer dimensions); client will shrink by chrome automatically.
         var expectedFormWidth = (int)Math.Round(rect.Width);
         var expectedFormHeight = (int)Math.Round(rect.Height);
@@ -624,6 +671,18 @@ internal static class Program
             try
             {
                 await webView.EnsureCoreWebView2Async(env);
+
+                var faviconSet = false;
+                async Task TrySetFaviconAsync(string? targetUrl)
+                {
+                    if (faviconSet) { return; }
+                    var icon = await TryFetchFaviconAsync(targetUrl);
+                    if (icon != null)
+                    {
+                        faviconSet = true;
+                        childForm.Icon = icon;
+                    }
+                }
 
                 // Intercept F5 and F6 before they reach web content
                 webView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = true;
@@ -725,9 +784,22 @@ internal static class Program
                     };
                 }
 
-                webView.CoreWebView2.SourceChanged += (_, _) => UpdateTitle(webView.Source?.ToString());
-                webView.CoreWebView2.NavigationStarting += (_, args) => UpdateTitle(args.Uri);
-                webView.CoreWebView2.NavigationCompleted += (_, _) => UpdateTitle(webView.Source?.ToString());
+                webView.CoreWebView2.SourceChanged += (_, _) =>
+                {
+                    var current = webView.Source?.ToString();
+                    UpdateTitle(current);
+                    _ = TrySetFaviconAsync(current);
+                };
+                webView.CoreWebView2.NavigationStarting += (_, args) =>
+                {
+                    UpdateTitle(args.Uri);
+                };
+                webView.CoreWebView2.NavigationCompleted += (_, _) =>
+                {
+                    var current = webView.Source?.ToString();
+                    UpdateTitle(current);
+                    _ = TrySetFaviconAsync(current);
+                };
 
                 // Handle new window requests (popups) by opening them in the same WebView2
                 // This preserves authentication sessions
