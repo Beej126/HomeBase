@@ -1,0 +1,26 @@
+/* 1. Target the event blocks */
+/* This selects the event containers in Google Calendar */
+.te, .rb-n, [role="button"] {
+    background-color: #4285f4 !important; /* Base color */
+    border-radius: 15px !important;       /* This creates the 'Bubbly' look */
+    border: none !important;
+    margin: 2px 4px !important;
+    padding: 10px !important;             /* Makes the block thick */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Adds depth */
+}
+
+/* 2. Make the text big and 'Homey' */
+.te span, .rb-n span {
+    font-family: 'Lexend', 'Segoe UI', sans-serif !important; 
+    font-size: 1.1rem !important;
+    font-weight: 700 !important;
+    color: white !important;
+}
+
+/* 3. Hide all the Google 'Clutter' */
+header, 
+#gb, 
+[role="navigation"], 
+.app-sidebar-content {
+    display: none !important;
+}

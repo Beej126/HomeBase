@@ -2,18 +2,20 @@
 
 #  Home Base
 
- A C# WinForms MDI dashboard application that hosts multiple WebView2 browser panels in a configurable layout with persistent session management, voice input, and auto-discovery of panel-specific scripts and styles.
+ A C# WinForms MDI dashboard application that hosts multiple WebView2 browser panels in a configurable layout with persistent session management, voice input, and <mark>injected scripts and styles</mark> to customize existing 3rd party web pags like todoist, google, etc.
+
+ To be used like [Skylight](https://myskylight.com), [DAKBoard](https://dakboard.com/), [MagicMirror<sup>2</sup>](https://magicmirror.builders/), [MangoDisplay](https://mangodisplay.com/), etc
 
 <img src="screenshot.png" alt="description" width="700">
 
 ## Features
 
-✅ **True MDI** - Built-in drag, resize, minimize, maximize, and close functionality for all panels  
+✅ **Good ol' MDI =)** - Built-in drag, resize, minimize, maximize, and close functionality for all panels  
 ✅ **Persistent WebView2 Environment** - Logins and sessions preserved across Restart refreshes  
 ✅ **Popup Auth Handling** - Authentication popups open within the same WebView2 to preserve session cookies  
 ✅ **YAML-Based Layout** - Flexible panel configuration using `hgroup` (horizontal flex) and `vgroup` (vertical equal division)  
 ✅ **Web Speech API Voice Input** - Voice-to-text powered by browser's native SpeechRecognition API  
-✅ **Auto-Discovery Scripts/Styles** - Panel-specific JS and CSS files loaded automatically based on panel title (spaces → minus sign)  
+✅ **Injected Scripts/Styles** - Panel-specific JS and CSS files loaded automatically based on panel title
 ✅ **Panel Activation Awareness** - Scripts can check if a panel is active to prevent interference from backgrounded panels  
 ✅ **URL Tracking & Dimensions** - Panel titles automatically update with current page URL and inner client dimensions  
 ✅ **Configurable Window Position** - `start-x` and `start-y` to position the app anywhere on multi-monitor setups  
