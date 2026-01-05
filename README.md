@@ -6,7 +6,7 @@
 
  To be used like [Skylight](https://myskylight.com), [DAKBoard](https://dakboard.com/), [MagicMirror<sup>2</sup>](https://magicmirror.builders/), [MangoDisplay](https://mangodisplay.com/), etc
 
-<img src="screenshot.png" alt="description" width="700">
+<img src="screenshot.png" alt="screenshot" width="700">
 
 ## Features
 

@@ -25,7 +25,17 @@ layout:
           url: https://photos.google.com
 
 
-      - hgroup:
+      - vgroup:
+
+        - hgroup:
+
+          - title: MSN Weather
+            url: https://www.msn.com/widgets/fullpage/weatherWidgets/widget?experiences=WeatherCardWCFull
+            width: 450
+            height: 300
+
+          - title: Google Home
+            url: https://google.com
 
         - title: Google Home
           url: https://google.com
