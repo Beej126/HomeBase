@@ -16,7 +16,6 @@ A C# WinForms MDI dashboard application that hosts multiple WebView2 browser pan
 ✅ **URL Tracking & Dimensions** - Panel titles automatically update with current page URL and inner client dimensions  
 ✅ **Configurable Window Position** - `start-x` and `start-y` to position the app anywhere on multi-monitor setups  
 ✅ **Toolbar Buttons** - Restart, Borderless, Un-Maximize, Voice, Keyboard (OSK) buttons with auto-sizing  
-✅ **Dark Theme** - Modern dark UI with styled MDI child windows
 
 ## Requirements
 
