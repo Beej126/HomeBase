@@ -1,0 +1,19 @@
+/* reduce padding on the core todo list */
+.list_editor.view_content {
+    padding: 1em;
+}
+
+/* hide one big portion of the header bar to save vertical space */
+header {
+    display: none !important;
+}
+
+/* hide another header */
+li[data-is-active]:not([class]) {
+    display: none !important;
+}
+
+/* move the side bar open/close button over to the right */
+button[aria-controls="sidebar"] {
+    left: 540px !important;
+}

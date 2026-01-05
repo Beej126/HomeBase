@@ -9,7 +9,7 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using YamlDotNet.Serialization;
 
-namespace MissionControl.Forms;
+namespace HomeBase;
 
 internal static class Program
 {
@@ -31,6 +31,7 @@ internal static class Program
     private static extern bool GetScrollInfo(IntPtr hwnd, int nBar, ref SCROLLINFO lpsi);
 
     private static CoreWebView2Environment? sharedWebView2Environment;
+    private static Icon? appIcon;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct SCROLLINFO
@@ -122,21 +123,22 @@ internal static class Program
         var yamlPath = Path.Combine(scriptDirectory, "config.yml");
         if (!File.Exists(yamlPath))
         {
-            MessageBox.Show($"config.yml not found at {yamlPath}", "Mission Control", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"config.yml not found at {yamlPath}", "Home Base", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
-        var (rootWidth, rootHeight, topItems) = LoadLayout(yamlPath);
+        var (rootWidth, rootHeight, startX, startY, topItems) = LoadLayout(yamlPath);
         if (topItems.Count == 0)
         {
-            MessageBox.Show("No panels defined in config.yml", "Mission Control", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("No panels defined in config.yml", "Home Base", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         var mainForm = new MdiMainForm(topItems, rootWidth, rootHeight, scriptDirectory)
         {
-            Text = "Mission Control",
-            StartPosition = FormStartPosition.CenterScreen,
+            Text = "Home Base",
+            StartPosition = FormStartPosition.Manual,
+            Location = new Point(startX, startY),
             ClientSize = new Size((int)Math.Round(rootWidth), (int)Math.Round(rootHeight)),
             FormBorderStyle = FormBorderStyle.None,
             MaximizeBox = false,
@@ -144,6 +146,12 @@ internal static class Program
             BackColor = Color.FromArgb(45, 45, 50),
             IsMdiContainer = true
         };
+
+        appIcon ??= LoadAppIcon();
+        if (appIcon != null)
+        {
+            mainForm.Icon = appIcon;
+        }
 
         // Add toolbar with buttons
         var toolbar = new FlowLayoutPanel
@@ -189,33 +197,33 @@ internal static class Program
             }
         };
 
-        var refreshButton = new Button
+        var restartButton = new Button
         {
-            Text = "Refresh",
-            Width = 90,
+            Text = "Restart",
             Height = 28,
+            AutoSize = true,
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(60, 60, 60),
             ForeColor = Color.White,
             Font = new Font("Segoe UI", 8F),
-            Padding = new Padding(0),
+            Padding = new Padding(4, 0, 4, 0),
             Margin = new Padding(0),
             TextAlign = ContentAlignment.MiddleCenter,
             UseCompatibleTextRendering = false
         };
-        refreshButton.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
-        refreshButton.Click += (_, _) => mainForm.HandleF5();
+        restartButton.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
+        restartButton.Click += (_, _) => mainForm.HandleF5();
 
         var borderlessButton = new Button
         {
             Text = "Borderless",
-            Width = 100,
             Height = 28,
+            AutoSize = true,
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(60, 60, 60),
             ForeColor = Color.White,
             Font = new Font("Segoe UI", 8F),
-            Padding = new Padding(0),
+            Padding = new Padding(4, 0, 4, 0),
             Margin = new Padding(0),
             TextAlign = ContentAlignment.MiddleCenter,
             UseCompatibleTextRendering = false
@@ -223,8 +231,102 @@ internal static class Program
         borderlessButton.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
         borderlessButton.Click += (_, _) => mainForm.ToggleBorderless();
 
-        toolbar.Controls.Add(refreshButton);
+        var restoreButton = new Button
+        {
+            Text = "Un-Maximize",
+            Height = 28,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(60, 60, 60),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 8F),
+            Padding = new Padding(4, 0, 4, 0),
+            Margin = new Padding(0),
+            TextAlign = ContentAlignment.MiddleCenter,
+            UseCompatibleTextRendering = false
+        };
+        restoreButton.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
+        restoreButton.Click += (_, _) =>
+        {
+            var focusedChild = mainForm.ActiveMdiChild;
+            if (focusedChild != null)
+            {
+                focusedChild.WindowState = FormWindowState.Normal;
+            }
+        };
+
+        var voiceButton = new Button
+        {
+            Text = "Voice",
+            Height = 28,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(60, 60, 60),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 8F),
+            Padding = new Padding(4, 0, 4, 0),
+            Margin = new Padding(0),
+            TextAlign = ContentAlignment.MiddleCenter,
+            UseCompatibleTextRendering = false
+        };
+        voiceButton.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
+        voiceButton.Click += (_, _) =>
+        {
+            var focusedChild = mainForm.ActiveMdiChild;
+            if (focusedChild != null)
+            {
+                var webView = focusedChild.Controls.OfType<WebView2>().FirstOrDefault();
+                if (webView?.CoreWebView2 != null)
+                {
+                    try
+                    {
+                        _ = webView.CoreWebView2.ExecuteScriptAsync("window.startVoiceInput();");
+                    }
+                    catch { }
+                }
+            }
+        };
+
+        var keyboardButton = new Button
+        {
+            Text = "Keyboard",
+            Height = 28,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(60, 60, 60),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 8F),
+            Padding = new Padding(4, 0, 4, 0),
+            Margin = new Padding(0),
+            TextAlign = ContentAlignment.MiddleCenter,
+            UseCompatibleTextRendering = false
+        };
+        keyboardButton.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
+        keyboardButton.Click += (_, _) =>
+        {
+            try
+            {
+                var oskPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "osk.exe");
+                Console.WriteLine($"Launching: {oskPath}");
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = oskPath,
+                    UseShellExecute = true
+                };
+                var process = System.Diagnostics.Process.Start(psi);
+                Console.WriteLine($"Process started: {process?.Id}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to launch osk.exe: {ex.Message}");
+            }
+        };
+
+        toolbar.Controls.Add(restartButton);
         toolbar.Controls.Add(borderlessButton);
+        toolbar.Controls.Add(restoreButton);
+        toolbar.Controls.Add(voiceButton);
+        toolbar.Controls.Add(keyboardButton);
         mainForm.Controls.Add(toolbar);
 
         mainForm.Load += async (_, _) =>
@@ -236,11 +338,50 @@ internal static class Program
         Application.Run(mainForm);
     }
 
+    private static Icon? LoadAppIcon()
+    {
+        try
+        {
+            var assembly = typeof(Program).Assembly;
+            using var iconStream = assembly.GetManifestResourceStream("HomeBase.logo.ico");
+            if (iconStream != null)
+            {
+                return new Icon(iconStream);
+            }
+
+            return Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static async Task InitializeWebView2Environment(string scriptDirectory)
     {
         if (sharedWebView2Environment != null) { return; }
 
-        var userDataFolder = Path.Combine(scriptDirectory, ".WebView2Data");
+        // Keep WebView2 cache outside the repo so dotnet watch isn't triggered by browser writes.
+        var userDataFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MissionControl",
+            "WebView2Data");
+
+        // One-time migration: if old cache exists in repo and new cache missing, copy to preserve sessions.
+        var legacyUserDataFolder = Path.Combine(scriptDirectory, ".WebView2Data");
+        if (Directory.Exists(legacyUserDataFolder) && !Directory.Exists(userDataFolder))
+        {
+            try
+            {
+                CopyDirectory(legacyUserDataFolder, userDataFolder);
+                Console.WriteLine($"Migrated WebView2 data to {userDataFolder}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to migrate WebView2 data: {ex.Message}");
+            }
+        }
+
         Directory.CreateDirectory(userDataFolder);
 
         try
@@ -249,7 +390,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to create WebView2 environment: {ex.Message}", "Mission Control", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Failed to create WebView2 environment: {ex.Message}", "Home Base", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -276,15 +417,10 @@ internal static class Program
         var availableWidth = mdiClientArea?.ClientSize.Width ?? parent.ClientSize.Width;
         var availableHeight = mdiClientArea?.ClientSize.Height ?? (parent.ClientSize.Height - toolbarHeight);
 
-        // Rule 2.5 diagnostics: compute panel totals vs client space after toolbar subtraction.
+        // Precompute panel rects and totals for rule 2.5 reporting.
         var panelRectsPreview = GetPanelRects(topItems[0], 0, 0, availableWidth, availableHeight);
         var totalPanelWidth = panelRectsPreview.Any() ? panelRectsPreview.Max(r => r.Left + r.Width) : 0;
         var totalPanelHeight = panelRectsPreview.Any() ? panelRectsPreview.Max(r => r.Top + r.Height) : 0;
-        Console.WriteLine("Layout summary (rule 2.5):");
-        Console.WriteLine($"  Client available (after toolbar): Width={availableWidth}, Height={availableHeight}");
-        Console.WriteLine($"  Panels combined:                Width={totalPanelWidth}, Height={totalPanelHeight}");
-        Console.WriteLine($"  Match:                          Width {(totalPanelWidth == availableWidth ? "OK" : "MISMATCH")}, Height {(totalPanelHeight == availableHeight ? "OK" : "MISMATCH")}");
-        Console.WriteLine();
 
         // Compute panel rects to fill the actual available MDI space
         var rects = panelRectsPreview;
@@ -292,7 +428,7 @@ internal static class Program
         // Use the shared WebView2 environment (persists across reinitializations to preserve logins/cache)
         if (sharedWebView2Environment == null)
         {
-            MessageBox.Show("WebView2 environment not initialized", "Mission Control", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("WebView2 environment not initialized", "Home Base", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
@@ -313,8 +449,17 @@ internal static class Program
                     fMask = SIF_ALL
                 };
                 if (!GetScrollInfo(handle, bar, ref info)) { return false; }
-                var visible = (info.nMax - info.nMin + 1) > info.nPage;
-                return visible;
+
+                // Consider visible only if style flag is present AND the scroll range exceeds the page.
+                var style = GetWindowLong(handle, GWL_STYLE);
+                var styleFlag = bar == SB_HORZ ? WS_HSCROLL : WS_VSCROLL;
+                var hasStyle = (style & styleFlag) != 0;
+
+                // If page is zero or range fits within the page, treat as not visible.
+                var range = info.nMax - info.nMin + 1;
+                var hasRange = info.nPage > 0 && range > info.nPage;
+
+                return hasStyle && hasRange;
             }
 
             var hVisible = HasScrollbar(mdiClient.Handle, SB_HORZ);
@@ -322,6 +467,13 @@ internal static class Program
             Console.WriteLine($"Scrollbar check (rule 6): Horizontal={(hVisible ? "VISIBLE" : "hidden")}, Vertical={(vVisible ? "VISIBLE" : "hidden")}");
             Console.WriteLine();
         }
+
+        // Rule 2.5: print summary at the end of output.
+        Console.WriteLine("Layout summary (rule 2.5):");
+        Console.WriteLine($"  Client available (after toolbar): Width={availableWidth}, Height={availableHeight}");
+        Console.WriteLine($"  Panels combined:                Width={totalPanelWidth}, Height={totalPanelHeight}");
+        Console.WriteLine($"  Match:                          Width {(totalPanelWidth == availableWidth ? "OK" : "MISMATCH")}, Height {(totalPanelHeight == availableHeight ? "OK" : "MISMATCH")}");
+        Console.WriteLine();
     }
 
     private static void CreateChild(Form parent, CoreWebView2Environment env, PanelRect rect, string scriptDirectory)
@@ -346,6 +498,11 @@ internal static class Program
             Top = (int)Math.Round(rect.Top)
         };
 
+        if (appIcon != null)
+        {
+            childForm.Icon = appIcon;
+        }
+
         // Set outer size from layout (rect carries outer dimensions); client will shrink by chrome automatically.
         var expectedFormWidth = (int)Math.Round(rect.Width);
         var expectedFormHeight = (int)Math.Round(rect.Height);
@@ -357,6 +514,9 @@ internal static class Program
         var expectedClientWidth = expectedFormWidth - chromeWidth;
         var expectedClientHeight = expectedFormHeight - chromeHeight;
 
+        // Update title to include inner client dimensions.
+        childForm.Text = $"{title} ({expectedClientWidth}x{expectedClientHeight})";
+
         var webView = new WebView2
         {
             Dock = DockStyle.Fill,
@@ -366,8 +526,26 @@ internal static class Program
         childForm.Controls.Add(webView);
         childForm.Show();
 
+        // Track panel activation to expose to scripts
+        childForm.Activated += (_, _) =>
+        {
+            if (webView?.CoreWebView2 != null)
+            {
+                try { _ = webView.CoreWebView2.ExecuteScriptAsync("window.__isPanelActive = true;"); }
+                catch { }
+            }
+        };
+        childForm.Deactivate += (_, _) =>
+        {
+            if (webView?.CoreWebView2 != null)
+            {
+                try { _ = webView.CoreWebView2.ExecuteScriptAsync("window.__isPanelActive = false;"); }
+                catch { }
+            }
+        };
+
         // Debug: measure actual vs expected dimensions
-        Console.WriteLine($"Panel '{title}':");
+        Console.WriteLine($"Panel '{title}' ({expectedClientWidth}x{expectedClientHeight}):");
         Console.WriteLine($"  Expected (Form):   Left={rect.Left}, Top={rect.Top}, Width={expectedFormWidth}, Height={expectedFormHeight}");
         Console.WriteLine($"  Expected (Client): Width={expectedClientWidth}, Height={expectedClientHeight}");
         Console.WriteLine($"  Actual (Form):     Left={childForm.Left}, Top={childForm.Top}, Width={childForm.Width}, Height={childForm.Height}");
@@ -386,6 +564,15 @@ internal static class Program
 
         // Double-click form title to copy URL to clipboard
         childForm.DoubleClick += (_, _) => CopyUrlToClipboard(state.Url);
+
+        // Update title when form is resized to show current client dimensions
+        childForm.Resize += (_, _) =>
+        {
+            var currentClientWidth = childForm.ClientSize.Width;
+            var currentClientHeight = childForm.ClientSize.Height;
+            Console.WriteLine($"Panel '{state.Title}' resized: ({currentClientWidth}x{currentClientHeight})");
+            childForm.Text = $"{state.Title} ({currentClientWidth}, {currentClientHeight}) - {state.Url}";
+        };
 
         // Initialize WebView2 asynchronously on the UI thread
         async void InitializeWebViewAsync()
@@ -411,6 +598,39 @@ internal static class Program
                     }
                 };
 
+                // Auto-inject JS and CSS based on panel title (spaces → minus, lowercase)
+                var baseFileName = title.ToLower().Replace(" ", "-");
+                var scriptDirectory_scripts = Path.Combine(scriptDirectory, "scripts");
+
+                // Try to inject title.js (auto-discovery or explicit config)
+                var jsPath = Path.Combine(scriptDirectory_scripts, baseFileName + ".js");
+                if (File.Exists(jsPath))
+                {
+                    var jsContent = await File.ReadAllTextAsync(jsPath);
+                    webView.CoreWebView2.NavigationCompleted += (_, _) =>
+                    {
+                        try { _ = webView.CoreWebView2.ExecuteScriptAsync(jsContent); }
+                        catch { }
+                    };
+                }
+
+                // Try to inject title.css (auto-discovery or explicit config)
+                var cssPath = Path.Combine(scriptDirectory_scripts, baseFileName + ".css");
+                if (File.Exists(cssPath))
+                {
+                    var cssContent = await File.ReadAllTextAsync(cssPath);
+                    webView.CoreWebView2.NavigationCompleted += (_, _) =>
+                    {
+                        try
+                        {
+                            var escapedCss = cssContent.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\'b", "\\b").Replace(Environment.NewLine, " ");
+                            _ = webView.CoreWebView2.ExecuteScriptAsync($"(function() {{ var style = document.createElement('style'); style.textContent = \"{escapedCss}\"; document.head.appendChild(style); }})();");
+                        }
+                        catch { }
+                    };
+                }
+
+                // (Optional) Still support explicit script/css properties from config for backward compatibility
                 if (!string.IsNullOrWhiteSpace(state.ScriptPath))
                 {
                     var fullScriptPath = Path.Combine(scriptDirectory, state.ScriptPath);
@@ -423,6 +643,42 @@ internal static class Program
                             catch { }
                         };
                     }
+                }
+
+                // (Optional) Still support explicit CSS properties from config for backward compatibility
+                if (!string.IsNullOrWhiteSpace(item.Css))
+                {
+                    var fullCssPath = Path.Combine(scriptDirectory, item.Css);
+                    if (File.Exists(fullCssPath))
+                    {
+                        var cssContent = await File.ReadAllTextAsync(fullCssPath);
+                        webView.CoreWebView2.NavigationCompleted += (_, _) =>
+                        {
+                            try
+                            {
+                                var escapedCss = cssContent.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\'b", "\\b").Replace(Environment.NewLine, " ");
+                                _ = webView.CoreWebView2.ExecuteScriptAsync($"(function() {{ var style = document.createElement('style'); style.textContent = \"{escapedCss}\"; document.head.appendChild(style); }})();");
+                            }
+                            catch { }
+                        };
+                    }
+                }
+
+                // Always inject voice input script and set initial panel state
+                var voiceScriptPath = Path.Combine(scriptDirectory, "scripts", "voice-input.js");
+                if (File.Exists(voiceScriptPath))
+                {
+                    var voiceScriptContent = await File.ReadAllTextAsync(voiceScriptPath);
+                    webView.CoreWebView2.NavigationCompleted += (_, _) =>
+                    {
+                        try 
+                        { 
+                            _ = webView.CoreWebView2.ExecuteScriptAsync(voiceScriptContent);
+                            // Set initial activation state (assume inactive until activated event fires)
+                            _ = webView.CoreWebView2.ExecuteScriptAsync("window.__isPanelActive = false;");
+                        }
+                        catch { }
+                    };
                 }
 
                 webView.CoreWebView2.SourceChanged += (_, _) => UpdateTitle(webView.Source?.ToString());
@@ -445,7 +701,7 @@ internal static class Program
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to initialize WebView2 for {state.Title}: {ex.Message}", "Mission Control", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show($"Failed to initialize WebView2 for {state.Title}: {ex.Message}", "Home Base", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -453,7 +709,7 @@ internal static class Program
         {
             var displayUrl = string.IsNullOrWhiteSpace(currentUrl) ? state.Url : currentUrl;
             state.Url = displayUrl;
-            childForm.Text = $"{state.Title} - {displayUrl}";
+            childForm.Text = $"{state.Title} ({expectedClientWidth}, {expectedClientHeight}) - {displayUrl}";
         }
 
         InitializeWebViewAsync();
@@ -470,10 +726,12 @@ internal static class Program
         catch { }
     }
 
-    private static (double RootWidth, double RootHeight, List<LayoutItem> TopItems) LoadLayout(string yamlPath)
+    private static (double RootWidth, double RootHeight, int StartX, int StartY, List<LayoutItem> TopItems) LoadLayout(string yamlPath)
     {
         var defaultWidth = 2560d;
         var defaultHeight = 1440d;
+        var defaultStartX = 0;
+        var defaultStartY = 0;
 
         var deserializer = new DeserializerBuilder()
             .IgnoreUnmatchedProperties()
@@ -483,6 +741,8 @@ internal static class Program
 
         var rootWidth = defaultWidth;
         var rootHeight = defaultHeight;
+        var startX = defaultStartX;
+        var startY = defaultStartY;
 
         object? layoutYaml = yaml;
 
@@ -490,6 +750,8 @@ internal static class Program
         {
             if (TryGetDouble(dict, "width", out var w)) { rootWidth = w; }
             if (TryGetDouble(dict, "height", out var h)) { rootHeight = h; }
+            if (TryGetInt(dict, "start-x", out var sx)) { startX = sx; }
+            if (TryGetInt(dict, "start-y", out var sy)) { startY = sy; }
             if (dict.ContainsKey("layout")) { layoutYaml = dict["layout"]; }
         }
 
@@ -509,7 +771,7 @@ internal static class Program
             if (normalized != null) { topNodes.Add(normalized); }
         }
 
-        return (rootWidth, rootHeight, topNodes);
+        return (rootWidth, rootHeight, startX, startY, topNodes);
     }
 
     private static LayoutItem? NormalizeYaml(object? node)
@@ -541,6 +803,7 @@ internal static class Program
 
             if (map.ContainsKey("url")) { item.Url = map["url"]?.ToString(); }
             if (map.ContainsKey("script")) { item.Script = map["script"]?.ToString(); }
+            if (map.ContainsKey("css")) { item.Css = map["css"]?.ToString(); }
             if (map.ContainsKey("width") && TryToDouble(map["width"], out var w)) { item.Width = w; }
 
             return item;
@@ -577,6 +840,36 @@ internal static class Program
         return TryToDouble(dict[key], out value);
     }
 
+    private static bool TryGetInt(IDictionary<object, object> dict, string key, out int value)
+    {
+        value = 0;
+        if (!dict.ContainsKey(key)) { return false; }
+        var s = dict[key]?.ToString();
+        return int.TryParse(s, out value);
+    }
+
+    private static void CopyDirectory(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+
+        foreach (var dir in Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(sourceDir, dir);
+            Directory.CreateDirectory(Path.Combine(destDir, relative));
+        }
+
+        foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(sourceDir, file);
+            var targetPath = Path.Combine(destDir, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath) ?? destDir);
+            if (!File.Exists(targetPath))
+            {
+                File.Copy(file, targetPath, overwrite: false);
+            }
+        }
+    }
+
     private static bool TryToDouble(object? input, out double value)
     {
         value = 0;
@@ -592,36 +885,36 @@ internal static class Program
         {
             case "hgroup":
             {
-                // Use outer panel dimensions to fill the available width; chrome is included in these widths.
+                // Rule 5: fixed panels align left-to-right; flex panels eat remaining space.
+                // Rule 4: config widths are inner (client) dimensions; add chrome for outer sizing.
                 var children = item.Panels ?? new List<LayoutItem>();
-                var totalConfig = children.Where(c => c.Width.HasValue).Sum(c => c.Width!.Value);
+                const double chromeWidth = 22; // per-panel chrome width
                 var flexCount = children.Count(c => !c.Width.HasValue);
-                var availableWidth = width; // outer width to consume fully
 
-                // When nothing is flexible, scale configured widths to fill (or shrink to fit) the available space.
-                var scale = flexCount == 0 && totalConfig > 0 ? availableWidth / totalConfig : 1;
-                var flexWidth = flexCount > 0 ? Math.Max(0, availableWidth - totalConfig) / flexCount : 0;
-
-                // Compute rounded outer widths that sum exactly to availableWidth to avoid overflow/gaps.
-                var rawWidths = children
-                    .Select(c => c.Width.HasValue ? c.Width.Value * scale : flexWidth)
+                // Fixed panels: inner width + chrome per panel for outer size.
+                var fixedOuterWidths = children
+                    .Where(c => c.Width.HasValue)
+                    .Select(c => (int)Math.Round(c.Width!.Value + chromeWidth))
                     .ToList();
+                var totalFixedOuter = fixedOuterWidths.Sum();
 
-                var roundedWidths = rawWidths.Select(w => (int)Math.Round(w)).ToList();
-                var roundedSum = roundedWidths.Sum();
-                var targetWidth = (int)Math.Round(availableWidth);
-                var delta = targetWidth - roundedSum;
-                if (roundedWidths.Count > 0 && delta != 0)
-                {
-                    roundedWidths[^1] += delta;  // adjust the last segment to consume any rounding drift
-                }
+                var availableWidth = width; // outer width to consume fully
+                var flexWidth = flexCount > 0 ? (int)Math.Round((availableWidth - totalFixedOuter) / flexCount) : 0;
+                var flexRemainder = flexCount > 0 ? (int)Math.Round(availableWidth - totalFixedOuter - flexWidth * flexCount) : 0;
 
                 var x = (int)Math.Round(left);
+                var fixedIndex = 0;
+                var flexIndex = 0;
                 for (var i = 0; i < children.Count; i++)
                 {
-                    var w = roundedWidths[i];
-                    rects.AddRange(GetPanelRects(children[i], x, (int)Math.Round(top), w, height));
-                    x += w;  // advance by full outer width
+                    var childWidth = children[i].Width.HasValue
+                        ? fixedOuterWidths[fixedIndex++]
+                        : flexWidth + (flexIndex == flexCount - 1 ? flexRemainder : 0);
+
+                    if (!children[i].Width.HasValue) { flexIndex++; }
+
+                    rects.AddRange(GetPanelRects(children[i], x, (int)Math.Round(top), childWidth, height));
+                    x += childWidth;
                 }
                 break;
             }
@@ -670,6 +963,7 @@ internal sealed class LayoutItem
     public string? Name { get; set; }
     public string? Url { get; set; }
     public string? Script { get; set; }
+    public string? Css { get; set; }
     public double? Width { get; set; }
     public List<LayoutItem>? Panels { get; set; }
 }

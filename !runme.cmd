@@ -1,3 +1,3 @@
-taskkill /IM MissionControl.Forms.exe /F
+taskkill /IM HomeBase.exe /F
 cls
-dotnet watch run --no-hot-reload --project MissionControl.Forms/MissionControl.Forms.csproj
+dotnet watch run --no-hot-reload --project HomeBase/HomeBase.csproj

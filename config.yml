@@ -1,27 +1,31 @@
+start-x: 4500
+start-y: 300
 width: 2560
 height: 1440
 
 layout:
-  - vgroup:
-
-    - hgroup:
-      - title: Google Calendar
-        url: https://calendar.google.com
-
-      - title: Google Photos
-        url: https://photos.google.com
 
     - hgroup:
 
       - title: Our Groceries
         url: https://www.ourgroceries.com/your-lists/list/MQ0VcOZaQr8UyWjeVQABSk
-        width: 200
+        width: 330
 
-      - title: Google Tasks
-        url: https://tasks.google.com
-        width: 300
-        script: scripts/google-tasks.js
+      - title: Todoist Chores
+        url: https://app.todoist.com/app/section/chores-6fh448CQc2C2CQG7
+        width: 445
 
-      - title: Google Home
-        url: https://google.com
-        width: 300
+
+      - vgroup:
+
+        - title: Google Calendar
+          url: https://calendar.google.com
+
+        - title: Google Photos
+          url: https://photos.google.com
+
+
+      - hgroup:
+
+        - title: Google Home
+          url: https://google.com

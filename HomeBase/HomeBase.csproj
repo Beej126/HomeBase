@@ -7,6 +7,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <MetadataUpdateSupport>false</MetadataUpdateSupport>
+    <ApplicationIcon>logo.ico</ApplicationIcon>
     <!-- Suppress MSB3277: WebView2 package pulls in WPF assembly with conflicting WindowsBase versions (4.0 vs 5.0).
          This is harmless; net10.0 version is used. Suppressing to keep build output clean.
 
@@ -24,7 +25,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Watch Include="..\config.yml" />
+    <EmbeddedResource Include="logo.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Watch Include="../config.yml" />
+    <Watch Include="../scripts/**/*.*" />
   </ItemGroup>
 
 </Project>
