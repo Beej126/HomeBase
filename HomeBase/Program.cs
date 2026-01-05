@@ -32,6 +32,7 @@ internal static class Program
 
     private static CoreWebView2Environment? sharedWebView2Environment;
     private static Icon? appIcon;
+    private static Image? appLogoImage;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct SCROLLINFO
@@ -152,6 +153,8 @@ internal static class Program
         {
             mainForm.Icon = appIcon;
         }
+
+        appLogoImage ??= LoadAppLogoImage();
 
         // Add toolbar with buttons
         var toolbar = new FlowLayoutPanel
@@ -322,11 +325,33 @@ internal static class Program
             }
         };
 
+        var aboutButton = new Button
+        {
+            Text = "About",
+            Height = 28,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(60, 60, 60),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 8F),
+            Padding = new Padding(4, 0, 4, 0),
+            Margin = new Padding(0),
+            TextAlign = ContentAlignment.MiddleCenter,
+            UseCompatibleTextRendering = false
+        };
+        aboutButton.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
+        aboutButton.Click += (_, _) =>
+        {
+            using var dialog = new AboutDialog(appIcon, appLogoImage);
+            dialog.ShowDialog(mainForm);
+        };
+
         toolbar.Controls.Add(restartButton);
         toolbar.Controls.Add(borderlessButton);
         toolbar.Controls.Add(restoreButton);
         toolbar.Controls.Add(voiceButton);
         toolbar.Controls.Add(keyboardButton);
+        toolbar.Controls.Add(aboutButton);
         mainForm.Controls.Add(toolbar);
 
         mainForm.Load += async (_, _) =>
@@ -354,6 +379,25 @@ internal static class Program
         catch
         {
             return null;
+        }
+    }
+
+    private static Image? LoadAppLogoImage()
+    {
+        try
+        {
+            var assembly = typeof(Program).Assembly;
+            using var imageStream = assembly.GetManifestResourceStream("HomeBase.logo.png");
+            if (imageStream != null)
+            {
+                return Image.FromStream(imageStream);
+            }
+
+            return appIcon?.ToBitmap() ?? SystemIcons.Application.ToBitmap();
+        }
+        catch
+        {
+            return appIcon?.ToBitmap() ?? SystemIcons.Application.ToBitmap();
         }
     }
 
