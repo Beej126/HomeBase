@@ -215,32 +215,22 @@ The application automatically reloads when these files change:
 - `scripts/**/*.js` - Panel-specific scripts re-injected (or auto-discovered for new files)
 - `scripts/**/*.css` - Panel styles refreshed
 
-## Development
-
-### Build
-
-```cmd
-dotnet build HomeBase.Forms/HomeBase.Forms.csproj
-```
-
-### Watch Mode (Auto-rebuild)
-
-```cmd
-dotnet watch run --no-hot-reload --project HomeBase.Forms/HomeBase.Forms.csproj
-```
-
 ### Dependencies
 
 - **Microsoft.Web.WebView2.WinForms** - WebView2 control and environment management
 - **YamlDotNet** - YAML configuration parsing
 
-## Known Limitations
-
-- Fixed window size (configurable via `config.yml` but application doesn't resize responsively)
-- No scrollbars (panels sized to fit exactly within MDI container bounds)
-- Voice input cannot distinguish between multiple instances (singleton per browser context)
-- Panel-specific scripts run on every page navigation (cannot be conditionally toggled)
-
 ## License
 
 MIT
+
+## Anticipated Hardware Pairing
+
+### 12gen Alder Lake N200 based mini PC = $250
+- 16GB RAM
+- supposed to handle 10-15 webview panels easily
+
+[<img src="MOREFINE-n200-pc.png" alt="monitor" width="400px" />](https://www.amazon.com/gp/product/B0DHXWWWVY)
+
+### 24 inch, 2560x1440, 10-Point Capacitive Touch Screen = $210
+[<img src="Pisichen24-monitor.png" alt="monitor" width="400px" />](https://www.amazon.com/gp/product/B0FNM2DSJR)
