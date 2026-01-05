@@ -4,7 +4,6 @@
 
  A C# WinForms MDI dashboard application that hosts multiple WebView2 browser panels in a configurable layout with persistent session management, voice input, and auto-discovery of panel-specific scripts and styles.
 
-<br/><br/><br/>
 <img src="screenshot.png" alt="description" width="700">
 
 ## Features
