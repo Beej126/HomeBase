@@ -236,5 +236,9 @@ MIT
 
 [<img src="MOREFINE-n200-pc.png" alt="monitor" width="400px" />](https://www.amazon.com/gp/product/B0DHXWWWVY)
 
-### 24 inch, 2560x1440, 10-Point Capacitive Touch Screen = $210
+### 27 inch (same as Skylight Max), 2560 x 1440, 10-point capacitive touch screen = $300 
+
+[<img width="400px" src="https://github.com/user-attachments/assets/a3f4a265-0569-43ca-ad02-6004e8a07426" />](https://www.amazon.com/Pisichen-Touchscreen-2560x1440-10-Point-Computer/dp/B0DKXKL7V7)
+
+### 24 inch, 2560x1440, 10-point capacitive touch screen = $210
 [<img src="Pisichen24-monitor.png" alt="monitor" width="400px" />](https://www.amazon.com/gp/product/B0FNM2DSJR)
