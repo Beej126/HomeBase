@@ -10,48 +10,52 @@
 
 ## Features
 
-✅ **Good ol' MDI =)** - Built-in drag, resize, minimize, maximize, and close functionality for all panels  
-✅ **Persistent WebView2 Environment** - Logins and sessions preserved across Restart refreshes  
-✅ **Popup Auth Handling** - Authentication popups open within the same WebView2 to preserve session cookies  
-✅ **YAML-Based Layout** - Flexible panel configuration using `hgroup` (horizontal flex) and `vgroup` (vertical equal division)  
-✅ **Web Speech API Voice Input** - Voice-to-text powered by browser's native SpeechRecognition API  
-✅ **Injected Scripts/Styles** - Panel-specific JS and CSS files loaded automatically based on panel title
-✅ **Panel Activation Awareness** - Scripts can check if a panel is active to prevent interference from backgrounded panels  
-✅ **URL Tracking & Dimensions** - Panel titles automatically update with current page URL and inner client dimensions  
-✅ **Configurable Window Position** - `start-x` and `start-y` to position the app anywhere on multi-monitor setups  
-✅ **Toolbar Buttons** - Restart, Borderless, Un-Maximize, Voice, Keyboard (OSK) buttons with auto-sizing  
+✅ **Good ol' MDI =)** - Built-in drag, resize, minimize, maximize, and close functionality for all panels<br/>
+✅ **YAML-Based Layout** - Flexible panel configuration using `hgroup` (horizontal flex) and `vgroup` (vertical equal division)<br/>
+✅ **Web Speech API Voice Input** - Voice-to-text powered by browser's native SpeechRecognition API<br/>
+✅ **Injected Scripts/Styles** - Panel-specific JS and CSS files loaded automatically based on panel title<br/>
+✅ **Panel Activation Awareness** - Scripts can check if a panel is active to prevent interference from backgrounded panels<br/>
+✅ **URL Tracking & Dimensions** - Panel titles automatically update with current page URL and inner client dimensions<br/>
+✅ **Toolbar Buttons** - Restart, Borderless, Un-Maximize, Voice, Keyboard (OSK) buttons with auto-sizing<br/>
 
 ## Requirements
 
-- Windows 10/11
-- .NET 10.0 Preview (or .NET 8+)
-- Microsoft Edge WebView2 Runtime
+- Windows with .Net 8+ sdk loaded
 
-## Project Structure
+## Usage
 
+### Run the Application
+
+```cmd
+!runme.cmd
 ```
-HomeBase/
-├── HomeBase.Forms/
-│   ├── Program.cs                 # Main application with MDI container, layout engine, voice button, toolbar
-│   └── HomeBase.Forms.csproj
-├── config.yml                     # Layout, panel configuration, and window positioning
-├── scripts/
-│   ├── voice-input.js            # Web Speech API wrapper (auto-injected to all panels)
-│   ├── our-groceries.js          # Auto-discovered for "Our Groceries" panel
-│   └── [panel-title].js          # Auto-discovered based on panel title (spaces → minus)
-├── !runme.cmd                     # Launch script with dotnet watch
-└── README.md
-```
+
+### Keyboard Shortcuts & Toolbar Buttons
+
+| Action | Button | Shortcut | Effect |
+|--------|--------|----------|--------|
+| **Restart** | Toolbar | F5 | Recreates all panels, preserves logins |
+| **Borderless** | Toolbar | F6 | Toggles window border (maximize space) |
+| **Un-Maximize** | Toolbar | — | Restores any maximized child to normal size |
+| **Voice** | Toolbar | Ctrl+Shift+V | Starts Web Speech API listening on active panel |
+| **Keyboard** | Toolbar | — | Launches Windows On-Screen Keyboard (osk.exe) |
+
+### Mouse Actions
+
+- **Double-click title** - Copy current URL to clipboard
 
 ## Configuration
 
 Edit `config.yml` to define your dashboard layout:
 
 ```yaml
-start-x: 4500           # Window left edge position
-start-y: 300            # Window top edge position
+
+# start-x: 4500           # Window left edge position
+# start-y: 300            # Window top edge position
+
 width: 2560             # Dashboard outer width
 height: 1440            # Dashboard outer height
+
 vgroup:
   - title: Our Groceries
     url: https://www.example.com/groceries
@@ -85,109 +89,6 @@ vgroup:
 - `start-x` - Left edge position in screen coordinates (useful for multi-monitor setups)
 - `start-y` - Top edge position in screen coordinates
 
-## Auto-Discovery of Scripts and Styles
-
-The application automatically discovers and injects JavaScript and CSS files based on panel titles:
-
-**Panel title:** `Our Groceries`  
-**Auto-discovered files:**
-- `scripts/our-groceries.js` (if present)
-- `scripts/our-groceries.css` (if present)
-
-Conversion rule: Replace spaces with hyphens, convert to lowercase.
-
-### Voice Input in Panel Scripts
-
-All panels have access to the `startVoiceInput()` function. Example usage:
-
-```javascript
-// scripts/our-groceries.js
-setInterval(() => {
-  const inputField = document.querySelector('input[placeholder="Add item"]');
-  if (inputField && document.hidden === false) {
-    inputField.addEventListener('focus', () => {
-      window.startVoiceInput();
-    });
-  }
-}, 1000);
-```
-
-The voice input respects panel activation: only the active (focused) panel will process voice input, preventing multiple panels from listening simultaneously.
-
-## Usage
-
-### Run the Application
-
-```cmd
-!runme.cmd
-```
-
-Or manually:
-
-```cmd
-dotnet watch run --no-hot-reload --project HomeBase.Forms/HomeBase.Forms.csproj
-```
-
-### Keyboard Shortcuts & Toolbar Buttons
-
-| Action | Button | Shortcut | Effect |
-|--------|--------|----------|--------|
-| **Restart** | Toolbar | F5 | Recreates all panels, preserves logins |
-| **Borderless** | Toolbar | F6 | Toggles window border (maximize space) |
-| **Un-Maximize** | Toolbar | — | Restores any maximized child to normal size |
-| **Voice** | Toolbar | Ctrl+Shift+V | Starts Web Speech API listening on active panel |
-| **Keyboard** | Toolbar | — | Launches Windows On-Screen Keyboard (osk.exe) |
-
-### Mouse Actions
-
-- **Drag title bar** - Move MDI child window
-- **Drag edges/corners** - Resize MDI child window
-- **Double-click title** - Copy current URL to clipboard
-- **Minimize/Maximize/Close** - Standard MDI window buttons
-
-## Technical Details
-
-### Persistent WebView2 Sessions
-
-The application uses a shared `CoreWebView2Environment` instance that persists across Restart refreshes. The user data folder is stored at `%LOCALAPPDATA%\HomeBase\WebView2Data\`, ensuring:
-
-- Login sessions remain active between refreshes
-- Cookies and cached data are preserved
-- Authentication state is maintained
-- Migration from old `.WebView2Data/` location handled on first startup
-
-### Popup Authentication
-
-Authentication flows that open popup windows (e.g., OAuth) are handled via the `NewWindowRequested` event, which redirects the popup URL to the same WebView2 instance. This prevents session loss.
-
-### Web Speech API Voice Input
-
-`voice-input.js` is automatically injected into all panels:
-
-```javascript
-// Always available in all panels
-window.startVoiceInput();     // Start listening
-window.stopVoiceInput();      // Stop listening
-window.__isPanelActive        // boolean: true if panel is focused, false if backgrounded
-```
-
-**Guard against inactive panels:**
-
-```javascript
-// Your script automatically checks activation state
-if (window.__isPanelActive !== true) {
-  return;  // Skip voice if this panel isn't active
-}
-```
-
-### Panel Title Format
-
-Titles show current URL and inner client dimensions:
-
-```
-Our Groceries — www.example.com/groceries (330 × 640)
-```
-
 ### Layout Calculation & Sizing
 
 The layout engine:
@@ -207,6 +108,58 @@ The layout engine:
 - First panel: `width: 330` → 330px inner client width, ~374px outer
 - Remaining panels: flex to fill remaining horizontal space
 
+
+## Project Folder Structure
+
+```
+HomeBase/
+├── HomeBase.Forms/
+│   ├── Program.cs                # Main application with MDI container, layout engine, voice button, toolbar
+│   └── HomeBase.Forms.csproj
+├── config.yml                    # Layout, panel configuration, and window positioning
+├── scripts/                      # and styles
+│   ├── voice-input.js            # Web Speech API wrapper (auto-injected to all panels)
+│   ├── our-groceries.js          # matched to config.yml panel title
+│   ├── our-groceries.css         # ditto
+└── !runme.cmd                    # Launch script with dotnet watch
+```
+
+### Auto-Discovery of Scripts and Styles
+
+The application automatically discovers and injects JavaScript and CSS files based on panel titles:
+(matches by replacing spaces with hyphens and converting to all lowercase)
+
+**Example panel title:** `Our Groceries`  
+**Auto-discovered files:**
+- `scripts/our-groceries.js` (if present)
+- `scripts/our-groceries.css` (if present)
+
+### Voice Input in Panel Scripts
+
+All panels have access to the `startVoiceInput()` and `stopVoiceInput()` function. Example usage:
+
+```javascript
+// scripts/our-groceries.js
+setInterval(() => {
+  const inputField = document.querySelector('input[placeholder="Add item"]');
+  if (inputField && document.hidden === false) {
+    inputField.addEventListener('focus', () => {
+      window.startVoiceInput();
+    });
+  }
+}, 1000);
+```
+
+Only the active (focused) panel receives the current voice input. This seemed the best intuitive approach to directing where voice typing happens.
+
+### Panel Title Format
+
+Titles show current URL and inner client dimensions:
+
+```
+Our Groceries — www.example.com/groceries (330 × 640)
+```
+
 ### Hot-Reload Disabled
 
 WinForms metadata handlers are incompatible with .NET hot-reload, so the application runs with `--no-hot-reload`.
@@ -218,6 +171,8 @@ The application automatically reloads when these files change:
 - `config.yml` - Triggers full layout recalculation and panel recreation
 - `scripts/**/*.js` - Panel-specific scripts re-injected (or auto-discovered for new files)
 - `scripts/**/*.css` - Panel styles refreshed
+
+Meant to facilitate convenient deployment of updates from a dev PC to the running panel PC over fileshare.
 
 ### Dependencies
 
