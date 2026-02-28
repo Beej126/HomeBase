@@ -176,7 +176,7 @@ Meant to facilitate convenient deployment of updates from a dev PC to the runnin
 
 ### Dependencies
 
-- **Microsoft.Web.WebView2.WinForms** - WebView2 control and environment management
+- **Microsoft.Web.WebView2.WinForms** - WebView2 control
 - **YamlDotNet** - YAML configuration parsing
 
 ## License
