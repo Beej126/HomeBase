@@ -159,15 +159,23 @@ internal static class Program
         appLogoImage ??= LoadAppLogoImage();
 
         // Add toolbar with buttons
-        var toolbar = new FlowLayoutPanel
+        var toolbar = new Panel
         {
             Dock = DockStyle.Top,
             Height = 28,
             BackColor = Color.FromArgb(90, 90, 90),
+            Padding = new Padding(0),
+            Margin = new Padding(0)
+        };
+
+        var leftButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Padding = new Padding(0),
-            Margin = new Padding(0)
+            Margin = new Padding(0),
+            BackColor = Color.Transparent
         };
 
         // Make toolbar draggable to move main window
@@ -175,6 +183,15 @@ internal static class Program
         bool isDragging = false;
 
         toolbar.MouseDown += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                isDragging = true;
+                lastMousePos = e.Location;
+            }
+        };
+
+        leftButtons.MouseDown += (_, e) =>
         {
             if (e.Button == MouseButtons.Left)
             {
@@ -194,7 +211,26 @@ internal static class Program
             }
         };
 
+        leftButtons.MouseMove += (_, e) =>
+        {
+            if (isDragging)
+            {
+                mainForm.Location = new Point(
+                    mainForm.Location.X + e.X - lastMousePos.X,
+                    mainForm.Location.Y + e.Y - lastMousePos.Y
+                );
+            }
+        };
+
         toolbar.MouseUp += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                isDragging = false;
+            }
+        };
+
+        leftButtons.MouseUp += (_, e) =>
         {
             if (e.Button == MouseButtons.Left)
             {
@@ -348,12 +384,31 @@ internal static class Program
             dialog.ShowDialog(mainForm);
         };
 
-        toolbar.Controls.Add(restartButton);
-        toolbar.Controls.Add(borderlessButton);
-        toolbar.Controls.Add(restoreButton);
-        toolbar.Controls.Add(voiceButton);
-        toolbar.Controls.Add(keyboardButton);
-        toolbar.Controls.Add(aboutButton);
+        var exitButton = new Button
+        {
+            Text = "Exit",
+            Height = 28,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(60, 60, 60),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 8F),
+            Padding = new Padding(4, 0, 4, 0),
+            Margin = new Padding(0),
+            TextAlign = ContentAlignment.MiddleCenter,
+            UseCompatibleTextRendering = false
+        };
+        exitButton.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
+        exitButton.Click += (_, _) => mainForm.Close();
+
+        leftButtons.Controls.Add(restartButton);
+        leftButtons.Controls.Add(borderlessButton);
+        leftButtons.Controls.Add(restoreButton);
+        leftButtons.Controls.Add(voiceButton);
+        leftButtons.Controls.Add(keyboardButton);
+        leftButtons.Controls.Add(aboutButton);
+        leftButtons.Controls.Add(exitButton);
+        toolbar.Controls.Add(leftButtons);
         mainForm.Controls.Add(toolbar);
 
         mainForm.Load += async (_, _) =>
