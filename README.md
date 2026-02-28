@@ -185,11 +185,11 @@ MIT
 
 ## Anticipated Hardware Pairing
 
-### 12gen Alder Lake N200 based mini PC = $250
+### 12gen Alder Lake i3 N305 mini PC = $280
 - 16GB RAM
 - supposed to handle 10-15 webview panels easily
 
-[<img src="MOREFINE-n200-pc.png" alt="monitor" width="400px" />](https://www.amazon.com/gp/product/B0DHXWWWVY)
+[<img width="400px" src="https://github.com/user-attachments/assets/7b5505f0-de15-46f3-b2f5-45da63d77b0a" />](https://www.amazon.com/MOREFINE-M9S-AlderLake-Desktop-Computers/dp/B0DHZM95SN)
 
 ### 27 inch (same as Skylight Max), 2560 x 1440, 10-point capacitive touch screen = $300 
 
