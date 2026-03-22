@@ -2,7 +2,7 @@
 
 #  Home Base
 
- A C# WinForms MDI dashboard application that hosts multiple WebView2 browser panels in a configurable layout with persistent session management, voice input, and <mark>injected scripts and styles</mark> to customize existing 3rd party web pages like todoist, google, etc.
+ A C# WinForms MDI dashboard application that hosts multiple WebView2 browser panels in a configurable layout with persistent session management, voice input, and <mark>injected scripts and styles</mark> to customize existing 3rd party web pages like todoist, google cal, etc.
 
  To be used like [Skylight](https://myskylight.com), [DAKBoard](https://dakboard.com/), [MagicMirror<sup>2</sup>](https://magicmirror.builders/), [MangoDisplay](https://mangodisplay.com/), etc
 
@@ -10,13 +10,12 @@
 
 ## Features
 
-✅ **Good ol' MDI =)** - Built-in drag, resize, minimize, maximize, and close functionality for all panels<br/>
-✅ **YAML-Based Layout** - Flexible panel configuration using `hgroup` (horizontal flex) and `vgroup` (vertical equal division)<br/>
-✅ **Web Speech API Voice Input** - Voice-to-text powered by browser's native SpeechRecognition API<br/>
-✅ **Injected Scripts/Styles** - Panel-specific JS and CSS files loaded automatically based on panel title<br/>
-✅ **Panel Activation Awareness** - Scripts can check if a panel is active to prevent interference from backgrounded panels<br/>
-✅ **URL Tracking & Dimensions** - Panel titles automatically update with current page URL and inner client dimensions<br/>
-✅ **Toolbar Buttons** - Restart, Borderless, Un-Maximize, Voice, Keyboard (OSK) buttons with auto-sizing<br/>
+✅ **Good ol' MDI =)** - quick min/max any panel for more space<br/>
+✅ **[YAML-Based Layout](#configuration)** - Easy and flexible panel configuration strategy for both fixed and dynamic sized panel bundles<br/>
+✅ **[Injected JS/CSS](#auto-discovery-of-scripts-and-styles)** - Override everything we want! remove unecessary "chrome" to shape most minimal UI necessary for each task.<br/>
+✅ **[Toolbar Buttons](#keyboard-shortcuts--toolbar-buttons)** - Restart, Borderless, Un-Maximize, Voice, Keyboard (OSK) and Exit<br/>
+✅ **[Voice-to-text input](#voice-input-in-panel-scripts)** - Can be automatically activated upon panel focus<br/>
+✅ **[Auto restart on config change](#file-watchers)** - Share folder over your LAN, edit config.yml remotely, saving triggers auto refresh for instant results<br/>
 
 ## Requirements
 
@@ -40,7 +39,7 @@
 | **Voice** | Toolbar | Ctrl+Shift+V | Starts Web Speech API listening on active panel |
 | **Keyboard** | Toolbar | — | Launches Windows On-Screen Keyboard (osk.exe) |
 
-### Mouse Actions
+### Mouse/Touch Actions
 
 - **Double-click title** - Copy current URL to clipboard
 
@@ -183,17 +182,28 @@ Meant to facilitate convenient deployment of updates from a dev PC to the runnin
 
 MIT
 
-## Anticipated Hardware Pairing
+## Hardware Ideas
 
-### 12gen Alder Lake i3 N305 mini PC = $280
-- 16GB RAM
-- supposed to handle 10-15 webview panels easily
+### Core i3-1220P mini PC = ~$400
+- 16GB RAM upgradeable to 64GB - supposed to handle 10-15 webview panels easily
+- 2 performance + 8 efficiency cores yet only ~10–25W TDP typical use is nicely low end for always-on appliance
 
-[<img width="400px" src="https://github.com/user-attachments/assets/7b5505f0-de15-46f3-b2f5-45da63d77b0a" />](https://www.amazon.com/MOREFINE-M9S-AlderLake-Desktop-Computers/dp/B0DHZM95SN)
+[<img width="400px" src="https://github.com/user-attachments/assets/fcb2eeb0-1b1e-48fa-9a06-93dbd6e79cde" />](https://www.amazon.com/gp/product/B0F53QD7S5)
+<img width="400px" src="https://github.com/user-attachments/assets/a7056fba-d442-4b27-8099-8b5f42d08fb8" />
 
-### 27 inch (same as Skylight Max), 2560 x 1440, 10-point capacitive touch screen = $300 
+### 27 inch, 2560 x 1440, 10-point capacitive touch screens 
+- 2560 x 1440 is same as Skylight Max
+- 27" probably the sweet spot for not to small to see, not too big for touch input, and pricing (32" tier closer to $500)
 
-[<img width="400px" src="https://github.com/user-attachments/assets/a3f4a265-0569-43ca-ad02-6004e8a07426" />](https://www.amazon.com/Pisichen-Touchscreen-2560x1440-10-Point-Computer/dp/B0DKXKL7V7)
+#### Pisichen $300 (100Hz, speakers)
+- definitely in budget panel lottery tier! <mark>be ready to test and reorder</mark>
 
-### 24 inch, 2560x1440, 10-point capacitive touch screen = $210
-[<img src="Pisichen24-monitor.png" alt="monitor" width="400px" />](https://www.amazon.com/gp/product/B0FNM2DSJR)
+[<img width="400px" src="https://github.com/user-attachments/assets/6fdad0c9-5377-4d5d-95bf-57c9b07114f6" />](https://www.amazon.com/dp/B0G5PP1PMV)
+
+### Counter level stand
+
+#### Wearson WS-03A2 - $25
+- 5 x 5" mini pcs should fit in the triangle formed by back side of monitor and lower side of monitor stand to give center of gravity... mount to the arm with [heavy duty "nano" tape](https://www.amazon.com/dp/B07YB1ZXG6)
+- rest the monitor directly on the countertop for stability
+
+[<img width="400px" src="https://github.com/user-attachments/assets/307b465c-546c-43ae-bdaa-42fb2449ea35" />](https://www.amazon.com/gp/product/B0CHRX2VYF)
