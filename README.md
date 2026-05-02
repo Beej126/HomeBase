@@ -25,9 +25,10 @@
 
 ### Run the Application
 
-```cmd
-!runme.cmd
-```
+Just clone project to a folder and launch `!runme.cmd`.<br/>
+<br/>
+This script will automatically restart the app whenever key files change so we can rapidly iterate UI changes.<br/>
+Tip - share and edit from another PC with full desktop conveniences.
 
 ### Keyboard Shortcuts & Toolbar Buttons
 
@@ -45,8 +46,9 @@
 
 ## Configuration
 
-Edit `config.yml` to define your dashboard layout:
-
+Edit `config.yml` to define your preferred custom dashboard layout.<br/>
+<br/>
+Example:
 ```yaml
 
 # start-x: 4500           # Window left edge position
@@ -90,15 +92,14 @@ vgroup:
 
 ### Layout Calculation & Sizing
 
-The layout engine:
+The layout algorithm:
 
 1. Parses `config.yml` to extract window position, outer dimensions, and layout structure
 2. Measures the MDI container's `ClientSize` (accounting for title bar and borders)
 3. Recursively computes panel rectangles:
    - `hgroup`: Panels with `width` property get fixed pixels; remainder split flex panels equally
    - `vgroup`: All children split height equally
-4. Creates MDI child forms positioned at calculated coordinates
-5. Validates that all panels fit without scrollbars (rule: Width OK, Height OK)
+4. Creates MDI child forms at calc'ed coordinates, all nestled together without scrollbars
 
 **Example calculation:**
 - Container: 2560 × 1440
@@ -159,20 +160,6 @@ Titles show current URL and inner client dimensions:
 Our Groceries — www.example.com/groceries (330 × 640)
 ```
 
-### Hot-Reload Disabled
-
-WinForms metadata handlers are incompatible with .NET hot-reload, so the application runs with `--no-hot-reload`.
-
-### File Watchers
-
-The application automatically reloads when these files change:
-
-- `config.yml` - Triggers full layout recalculation and panel recreation
-- `scripts/**/*.js` - Panel-specific scripts re-injected (or auto-discovered for new files)
-- `scripts/**/*.css` - Panel styles refreshed
-
-Meant to facilitate convenient deployment of updates from a dev PC to the running panel PC over fileshare.
-
 ### Dependencies
 
 - **Microsoft.Web.WebView2.WinForms** - WebView2 control
@@ -184,16 +171,20 @@ MIT
 
 ## Hardware Ideas
 
-### Core i3-1220P mini PC = ~$400
-- 16GB RAM upgradeable to 64GB - supposed to handle 10-15 webview panels easily
-- 2 performance + 8 efficiency cores yet only ~10–25W TDP typical use is nicely low end for always-on appliance
+### Core i3-1220P mini PC (12th gen Alder Lake-P), 16GB RAM (DDR4 @ 3200 MHz), 500GB SSD = ~$400
+- AI says this can readily handle 10-15 msedge webview panels
+- 2P + 8E cores, ~10–25W TDP typical is good for an always-on appliance
+- 64GB max ram
+- Intel UHD iGPU - 4k2k@60hz max HDMI (2.1) / 8k2k@60hz max DP (1.4a)
+  - this iGPU shares system ram and apparently running dual channel makes a big performance difference
 
+#### Beelink EQI12
 [<img width="400px" src="https://github.com/user-attachments/assets/fcb2eeb0-1b1e-48fa-9a06-93dbd6e79cde" />](https://www.amazon.com/gp/product/B0F53QD7S5)
 <img width="400px" src="https://github.com/user-attachments/assets/a7056fba-d442-4b27-8099-8b5f42d08fb8" />
 
 ### 27 inch, 2560 x 1440, 10-point capacitive touch screens 
 - 2560 x 1440 is same as Skylight Max
-- 27" probably the sweet spot for not to small to see, not too big for touch input, and pricing (32" tier closer to $500)
+- 27" probably the sweet spot for not too small to see, not too big for touch input, and pricing (32" tier closer to $500)
 
 #### Pisichen $300 (100Hz, speakers)
 - definitely in budget panel lottery tier! <mark>be ready to test and reorder</mark>
