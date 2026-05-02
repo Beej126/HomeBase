@@ -12,14 +12,15 @@
 
 ✅ **Good ol' MDI =)** - quick min/max any panel for more space<br/>
 ✅ **[YAML-Based Layout](#configuration)** - Easy and flexible panel configuration strategy for both fixed and dynamic sized panel bundles<br/>
-✅ **[Injected JS/CSS](#auto-discovery-of-scripts-and-styles)** - Override everything we want! remove unecessary "chrome" to shape most minimal UI necessary for each task.<br/>
+✅ **[Injected JS/CSS](#auto-discovery-of-scripts-and-styles)** - Override everything we want! remove unecessary "chrome" to shape most minimal UI necessary for each task<br/>
 ✅ **[Toolbar Buttons](#keyboard-shortcuts--toolbar-buttons)** - Restart, Borderless, Un-Maximize, Voice, Keyboard (OSK) and Exit<br/>
 ✅ **[Voice-to-text input](#voice-input-in-panel-scripts)** - Can be automatically activated upon panel focus<br/>
-✅ **[Auto restart on config change](#file-watchers)** - Share folder over your LAN, edit config.yml remotely, saving triggers auto refresh for instant results<br/>
+✅ **[Auto restart on config change](#run-the-application)** - Share folder over your LAN, edit config.yml remotely, saving triggers auto refresh for instant results<br/>
 
 ## Requirements
 
-- Windows with .Net 8+ sdk loaded
+- Windows =)
+- [.Net sdk](https://dotnet.microsoft.com/en-us/download) installed
 
 ## Usage
 
@@ -198,3 +199,39 @@ MIT
 - rest the monitor directly on the countertop for stability
 
 [<img width="400px" src="https://github.com/user-attachments/assets/307b465c-546c-43ae-bdaa-42fb2449ea35" />](https://www.amazon.com/gp/product/B0CHRX2VYF)
+
+## Best of Breed - 3rd Party Web Apps
+
+### Photo Slideshow
+- I already scripted auto-cycling through Google Photo's "Memories" feature which provides slick collections even with music. These are really quite good and we get 20 new ones a day.
+  - The cool part is the web panel completely bypasses Google's yanking of it's photo API as of March 2025. Many other [dedicated photo frames are instantly bricked](https://tech.yahoo.com/cameras/articles/google-photos-losing-feature-long-182231484.html). But there is literally no way Google could ever bork this approach because it simply uses the google photos UI directly.
+
+### Groceries
+- I like [OurGroceries](https://www.ourgroceries.com/) - 100% free. easily shared. both web and mobile apps. brings good behavior like saving multiple lists, checking things off, automatic grocery store sections/categories, etc
+
+### Todo Lists
+- [TodoIst](https://www.todoist.com/) - pretty much the gold standard
+  
+### Calendar!
+this is where it gets thick in a hurry =)
+
+| Feature | **A) Share Individual Calendars** | **B) Central "Family" Calendar** |
+| :--- | :--- | :--- |
+| **Privacy** | **Low.** Everyone sees everything (Doctor visits, private hangouts) unless marked "Private." | **High.** Only specific events moved to the "Family" bucket are visible. |
+| **Effort** | **Low.** Set it once and it's automated. Everything they type on their phone shows for you. | **High.** Requires a "conscious act" to select the "Family" calendar for every event. |
+| **Noise Level** | **High.** Can be overwhelming. Your view gets cluttered with "Math Test," "Gym," and "Biology Project." | **Low.** Only the "Big Rocks" (Dinner, Trips, Appointments) appear. |
+| **Edit Control** | **Tricky.** Requires specific "Manage Changes" permissions for every pair of people. | **Easy.** Anyone in the Google Family Group can edit any event in that bucket. |
+| **Teen Buy-in** | **Passive.** They don't have to do anything different. You just "see" their world. | **Active.** They will likely forget to tag events as "Family," leading to missed info. |
+| **Kiosk View** | **Messy.** You'll need complex filtering in HomeBase to make it readable. | **Clean.** The kiosk acts as a curated "Highlight Reel" of the family's day. |
+
+- You could make the argument that the best low overhead shot at this a single shared central calendar that everybody can manage and call it a day. Everybody just puts the stuff that belongs on there. Sure you'll forget this or that, but that's inherently going to happen no matter what you do. Skylight doesn't solve that magically either.
+- Note: Google has something called a ["Family Group"](https://families.google/intl/en_us/families/) worth exploring.
+
+### cal sync providers
+I'm not even sure true "syncing" is the way to go versus just "share and show/hide" but there are tons of these out there:
+- [Hetk](https://www.hetk.io/pricing/) - $50 *yearly* for 8 calendars is a pretty good starting point
+- [Morgen](https://www.morgen.so/pricing) - $120 yearly
+- [SyncThemCalendars](https://syncthemcalendars.com/blog/five-best-calendar-synchronization-apps#comparison-of-key-features) - 5 "syncs" for $50/yr, 16 sync $100/yr... a sync is one way, but maybe you could get by with 1 sync per person into the central and then just everybody have view only of the central
+
+### doc-to-cal - e.g. Skylight has email to calendar feature
+- AI integration is exploding in all directions, OCR is now a trivial service, so i'm basically just going to keep asking what is the slickest way to do this on any given day =) e.g. Gemini.google.com now integrates with all our email, calendar, contacts, etc so we can chat something like "@Gmail find the latest school flyer and @Google Calendar add the events to my calendar." - how cool is that?!? 
