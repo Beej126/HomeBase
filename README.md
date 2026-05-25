@@ -26,7 +26,7 @@
 
 ### Run the Application
 
-Just clone project to a folder and launch `!runme.cmd`.<br/>
+Just clone project to a folder and launch [`!runme.cmd`](!runme.cmd).<br/>
 <br/>
 This script will automatically restart the app whenever key files change so we can rapidly iterate UI changes.<br/>
 Tip - share and edit from another PC with full desktop conveniences.
