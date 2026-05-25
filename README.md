@@ -161,46 +161,38 @@ Titles show current URL and inner client dimensions:
 Our Groceries — www.example.com/groceries (330 × 640)
 ```
 
-### Dependencies
-
-- **Microsoft.Web.WebView2.WinForms** - WebView2 control
-- **YamlDotNet** - YAML configuration parsing
-
 ## License
 
 MIT
 
 ## Hardware Ideas
 
-### Core i3-1220P mini PC (12th gen Alder Lake-P), 16GB RAM (DDR4 @ 3200 MHz), 500GB SSD = ~$400
+### Beelink EQI12 - Core i3-1220P (12th gen Alder Lake-P), 16GB RAM (DDR4 @ 3200 MHz), 500GB SSD = ~$400
 - AI says this can readily handle 10-15 msedge webview panels
 - 2P + 8E cores, ~10–25W TDP typical is good for an always-on appliance
 - 64GB max ram
 - Intel UHD iGPU - 4k2k@60hz max HDMI (2.1) / 8k2k@60hz max DP (1.4a)
   - this iGPU shares system ram and apparently running dual channel makes a big performance difference
 
-#### Beelink EQI12
 [<img width="400px" src="https://github.com/user-attachments/assets/fcb2eeb0-1b1e-48fa-9a06-93dbd6e79cde" />](https://www.amazon.com/gp/product/B0F53QD7S5)
 <img width="400px" src="https://github.com/user-attachments/assets/a7056fba-d442-4b27-8099-8b5f42d08fb8" />
 
-### 27 inch, 2560 x 1440, 10-point capacitive touch screens 
-- 2560 x 1440 is same as Skylight Max
-- 27" probably the sweet spot for not too small to see, not too big for touch input, and pricing (32" tier closer to $500)
 
-#### Pisichen $300 (100Hz, speakers)
-- definitely in budget panel lottery tier! <mark>be ready to test and reorder</mark>
+### Pisichen 27 inch, 2560 x 1440, 10-point capacitive touch screen, 100Hz, speakers = $250
+- 27 inch, 2560 x 1440 is exact same size as Skylight Max and could be the sweet spot for not-too-small-to-see / not-too-big-for-touch for good  prices (the 32 inch tier jumps to $500)
+- 24" model worth considering = ~$200
+- make sure you measure your counterspace and see what will actually fit. a 27 inch monitor (24 wide x 14 high x 1 deep) sitting right on counter level takes up a lot of space.
+- Pisichen is definitely a budget tier panel vendor - <mark>be ready to test for dead pixels and exchange</mark>
 
 [<img width="400px" src="https://github.com/user-attachments/assets/6fdad0c9-5377-4d5d-95bf-57c9b07114f6" />](https://www.amazon.com/dp/B0G5PP1PMV)
 
-### Counter level stand
-
-#### Wearson WS-03A2 - $25
+### Wearson WS-03A2 - Counter level monitor stand - $30
 - 5 x 5" mini pcs should fit in the triangle formed by back side of monitor and lower side of monitor stand to give center of gravity... mount to the arm with [heavy duty "nano" tape](https://www.amazon.com/dp/B07YB1ZXG6)
 - rest the monitor directly on the countertop for stability
 
 [<img width="400px" src="https://github.com/user-attachments/assets/307b465c-546c-43ae-bdaa-42fb2449ea35" />](https://www.amazon.com/gp/product/B0CHRX2VYF)
 
-## Best of Breed - 3rd Party Web Apps
+## Best of breed 3rd Party Web Apps
 
 ### Photo Slideshow
 - I already scripted auto-cycling through Google Photo's "Memories" feature which provides slick collections even with music. These are really quite good and we get 20 new ones a day.
