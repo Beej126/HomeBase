@@ -201,11 +201,13 @@ MIT
 ### Groceries
 - I like [OurGroceries](https://www.ourgroceries.com/) - 100% free. easily shared. both web and mobile apps. brings good behavior like saving multiple lists, checking things off, automatic grocery store sections/categories, etc
 
-### Todo Lists
-- [TodoIst](https://www.todoist.com/) - pretty much the gold standard
+### Todo Lists / Reminders
+- [TodoIst](https://www.todoist.com/) - pretty much the gold standard, except...
+- [FamilyWall](https://www.FamilyWall.com) - TodoIst doesn't do *shared* reminders really, it forces somebody to take each task (for a good reason)... FamilyWall (free tier) does allow for truly shared reminder task (main example: weekly "Take out the garbage") and has android app that pops notifications which is a key part of this working out in practice
   
 ### Calendar!
-this is where it gets thick in a hurry =)
+- this is definitely where sharing gets thick in a hurry =)
+- suggestion: use a dedicated reminder app above to carry less critical items that have flexibility and keep the calendar less busy with only true critical "time slot" items
 
 | Feature | **A) Share Individual Calendars** | **B) Central "Family" Calendar** |
 | :--- | :--- | :--- |
