@@ -199,11 +199,14 @@ MIT
   - The cool part is the web panel completely bypasses Google's yanking of it's photo API as of March 2025. Many other [dedicated photo frames are instantly bricked](https://tech.yahoo.com/cameras/articles/google-photos-losing-feature-long-182231484.html). But there is literally no way Google could ever bork this approach because it simply uses the google photos UI directly.
 
 ### Groceries
+At it's core a specialized form of todo list that could fit into a more generic app in the next cateogry below, but it's important to recognize importance of specifics like store area/categories and choosing from a master list of recurring items
 - I like [OurGroceries](https://www.ourgroceries.com/) - 100% free. easily shared. both web and mobile apps. brings good behavior like saving multiple lists, checking things off, automatic grocery store sections/categories, etc
 
 ### Todo Lists / Reminders
 - [TodoIst](https://www.todoist.com/) - pretty much the gold standard, except...
 - [FamilyWall](https://www.FamilyWall.com) - TodoIst doesn't do *shared* reminders really, it forces somebody to take each task (for a good reason)... FamilyWall (free tier) does allow for truly shared reminder task (main example: weekly "Take out the garbage") and has android app that pops notifications which is a key part of this working out in practice
+- [WeDo](https://wedotodo.app/) - supports shared tasks. mobile app **only** with  notifications.
+- [Cozi](https://www.cozi.com/) - free with ads. calendar beyond just task reminders. mobile app with notifications.
   
 ### Calendar!
 - this is definitely where sharing gets thick in a hurry =)
