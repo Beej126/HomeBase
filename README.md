@@ -2,7 +2,7 @@
 
 #  Home Base
 
- A C# WinForms MDI dashboard application that hosts multiple WebView2 browser panels in a configurable layout with persistent session management, voice input, and <mark>injected scripts and styles</mark> to customize existing 3rd party web pages like todoist, google cal, etc.
+A C# WinForms MDI dashboard application that hosts multiple WebView2 browser panels in a configurable layout with persistent session management, voice input, and <mark>injected scripts and styles</mark> to customize existing 3rd party web pages like todoist, google cal, etc.
 
  To be used like [Skylight](https://myskylight.com), [DAKBoard](https://dakboard.com/), [MagicMirror<sup>2</sup>](https://magicmirror.builders/), [MangoDisplay](https://mangodisplay.com/), etc
 
@@ -177,7 +177,6 @@ MIT
 [<img width="400px" src="https://github.com/user-attachments/assets/fcb2eeb0-1b1e-48fa-9a06-93dbd6e79cde" />](https://www.amazon.com/gp/product/B0F53QD7S5)
 <img width="400px" src="https://github.com/user-attachments/assets/a7056fba-d442-4b27-8099-8b5f42d08fb8" />
 
-
 ### Pisichen 27 inch, 2560 x 1440, 10-point capacitive touch screen, 100Hz, speakers = $250
 - 27 inch, 2560 x 1440 is exact same size as Skylight Max and could be the sweet spot for not-too-small-to-see / not-too-big-for-touch for good  prices (the 32 inch tier jumps to $500)
 - 24" model worth considering = ~$200
@@ -185,6 +184,13 @@ MIT
 - Pisichen is definitely a budget tier panel vendor - <mark>be ready to test for dead pixels and exchange</mark>
 
 [<img width="400px" src="https://github.com/user-attachments/assets/6fdad0c9-5377-4d5d-95bf-57c9b07114f6" />](https://www.amazon.com/dp/B0G5PP1PMV)
+
+### (May 2026) LG announces 32 inch 2560 x 1440 E-PAPER display - no pricing yet
+- I've been waiting years to see large format e-ink for this exact purpose
+- It's not a complete slam dunk since there's no touch input
+- and it's a commercially targeted product probably in the multiple $thousands
+
+[<img width="800px" src="https://github.com/user-attachments/assets/edd08e55-4cfc-45b4-9baa-3f19a6aa0842" />](https://www.lg-informationdisplay.com/products-solutions/digital-signage/lg-e-paper-display/32RS1Q-B)
 
 ### Wearson WS-03A2 - Counter level monitor stand - $30
 - 5 x 5" mini pcs should fit in the triangle formed by back side of monitor and lower side of monitor stand to give center of gravity... mount to the arm with [heavy duty "nano" tape](https://www.amazon.com/dp/B07YB1ZXG6)
