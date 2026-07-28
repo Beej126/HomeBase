@@ -33,13 +33,13 @@ Tip - share source folder and edit from another PC with full desktop convenience
 
 ### Keyboard Shortcuts & Toolbar Buttons
 
-| Action | Button | Shortcut | Effect |
+| Action | Toolbar<br/> Button | Shortcut | Effect |
 |--------|--------|----------|--------|
-| **Restart** | Toolbar | F5 | Recreates all panels, preserves logins |
-| **Borderless** | Toolbar | F6 | Toggles window border (maximize space) |
-| **Un-Maximize** | Toolbar | — | Restores any maximized child to normal size |
-| **Voice** | Toolbar | Ctrl+Shift+V | Starts Web Speech API listening on active panel |
-| **Keyboard** | Toolbar | — | Launches Windows On-Screen Keyboard (osk.exe) |
+| **Restart** | ✅ | F5 | Recreates all panels, preserves logins |
+| **Borderless** | ✅ | F6 | Toggles window border (maximize space) |
+| **Un-Maximize** | ✅ | — | Restores any maximized child to normal size |
+| **Voice** | ✅ | Ctrl+Shift+V | Starts Web Speech API listening on active panel |
+| **Keyboard** | ✅ | — | Launches Windows On-Screen Keyboard (osk.exe) |
 
 ### Mouse/Touch Actions
 
