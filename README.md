@@ -29,7 +29,7 @@ A C# WinForms MDI dashboard application that hosts multiple WebView2 browser pan
 Just clone project to a folder and launch [`!runme.cmd`](!runme.cmd).<br/>
 <br/>
 This script will automatically restart the app whenever key files change so we can rapidly iterate UI changes.<br/>
-Tip - share and edit from another PC with full desktop conveniences.
+Tip - share source folder and edit from another PC with full desktop conveniences.
 
 ### Keyboard Shortcuts & Toolbar Buttons
 
